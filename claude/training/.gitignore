@@ -1,0 +1,4 @@
+prep.npz
+runs/
+out/
+__pycache__/

@@ -1,0 +1,1253 @@
+<title>Neural Digit Reader</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: an instrument read left to right like the network itself (pad → network → answer), inspector and notes beneath; one column on phones with the answer straight under the pad. */
+:root {
+  --paper: #edf0f4;     /* page ground: cool drafting paper */
+  --panel: #fbfcfd;     /* instrument cards */
+  --ink: #121a25;       /* text, the pen, neuron activity */
+  --muted: #586577;     /* secondary text, silent neurons */
+  --rule: #d3dae3;      /* borders and guides */
+  --grid: #e5e9ef;      /* pad graph paper, bar tracks */
+  --for: #dc5a14;       /* evidence that pushes a score up */
+  --against: #1f6bcf;   /* evidence that pushes it down */
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0b0f15; --panel: #121821; --ink: #e5ebf2; --muted: #8b99ab;
+    --rule: #263141; --grid: #1a2230; --for: #ff8a42; --against: #519eff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0b0f15; --panel: #121821; --ink: #e5ebf2; --muted: #8b99ab;
+  --rule: #263141; --grid: #1a2230; --for: #ff8a42; --against: #519eff;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 15px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 22px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 32px; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 125%;
+  font-size: clamp(27px, 4.4vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede { margin: 8px 0 0; max-width: 60ch; color: var(--muted); }
+.spec {
+  margin: 0;
+  font: 500 12px/1.6 var(--font-mono);
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.spec b { color: var(--ink); font-weight: 600; }
+
+/* Grid */
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "pad" "answer" "net" "inspect" "how";
+}
+@media (min-width: 760px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "pad answer" "net net" "inspect inspect" "how how";
+  }
+}
+@media (min-width: 1140px) {
+  .grid {
+    grid-template-columns: minmax(300px, 340px) minmax(0, 1fr) minmax(250px, 280px);
+    grid-template-areas: "pad net answer" "inspect inspect inspect" "how how how";
+  }
+}
+.pad-card { grid-area: pad; }
+.answer-card { grid-area: answer; }
+.net-card { grid-area: net; }
+.inspect-card { grid-area: inspect; }
+.how-card { grid-area: how; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 14px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; min-height: 22px; }
+h2 {
+  margin: 0;
+  font: 600 11.5px/1.3 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+
+/* Drawing pad */
+.pad-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: calc(100% / 12) calc(100% / 12);
+  background-position: -1px -1px;
+  touch-action: none;
+}
+#pad { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.pad-empty {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--muted); font-size: 14px; pointer-events: none; text-align: center; padding: 16px;
+}
+.pad-tag {
+  position: absolute; left: 8px; top: 8px; pointer-events: none;
+  font: 500 11px/1 var(--font-mono); letter-spacing: 0.04em;
+  padding: 5px 7px; border-radius: 3px;
+  background: var(--paper); color: var(--muted); border: 1px solid var(--rule);
+}
+.pad-note { margin: 0; font-size: 13px; color: var(--muted); }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  font: 500 14px/1 var(--font-body);
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 4px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.btn.primary:hover:not(:disabled) { opacity: 0.88; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.small { min-height: 30px; padding: 0 10px; font-size: 13px; }
+:is(.btn, .bar-row, .chip, #net):focus-visible { outline: 2px solid var(--against); outline-offset: 2px; }
+
+/* Answer */
+.readout { display: flex; align-items: center; gap: 16px; min-height: 108px; }
+.big {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 125%;
+  font-size: 108px;
+  line-height: 0.86;
+  min-width: 0.78em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.big.idle { color: var(--muted); font-weight: 500; }
+.verdict { min-width: 0; display: grid; gap: 4px; }
+.verdict p { margin: 0; }
+#verdict { font-weight: 600; font-size: 17px; line-height: 1.3; text-wrap: balance; }
+#runner { color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.bar-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.3em minmax(0, 1fr) 4.4em;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 14px/1 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.bar-row:hover { background: var(--grid); }
+.bar-row .track { height: 10px; border-radius: 2px; background: var(--grid); overflow: hidden; }
+.bar-row:hover .track { background: var(--paper); }
+.bar-row .fill { display: block; height: 100%; width: 0; background: var(--muted); opacity: 0.55; transition: width 120ms linear; }
+.bar-row.top .fill { background: var(--ink); opacity: 1; }
+.bar-row .pct { text-align: right; font: 500 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar-row.top .pct { color: var(--ink); }
+.bar-row.sel { box-shadow: inset 3px 0 0 var(--for); }
+.answer-foot { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+/* Network */
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 500 11.5px/1.4 var(--font-mono); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend i { display: inline-block; flex: none; }
+.lg-on i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); }
+.lg-off i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--muted); }
+.lg-for i { width: 18px; height: 3px; border-radius: 2px; background: var(--for); }
+.lg-against i { width: 18px; height: 3px; border-radius: 2px; background: var(--against); }
+.net-wrap { position: relative; width: 100%; min-width: 0; }
+#net { display: block; width: 100%; height: 340px; }
+.caption { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 72ch; }
+
+/* Inspector */
+.insp-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.insp-title h3 { margin: 0; font: 700 19px/1.2 var(--font-display); font-stretch: 112%; }
+.badge { font: 600 10.5px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 6px; border-radius: 3px; border: 1px solid var(--rule); color: var(--muted); }
+.insp-body { display: grid; grid-template-columns: repeat(2, minmax(0, 176px)) minmax(0, 1fr); gap: 16px 22px; align-items: start; }
+@media (max-width: 620px) {
+  .insp-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .insp-text { grid-column: 1 / -1; }
+}
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+.map {
+  display: block; width: 100%; max-width: 176px; aspect-ratio: 1 / 1; height: auto;
+  image-rendering: crisp-edges; image-rendering: pixelated;
+  border: 1px solid var(--rule); border-radius: 3px; background: var(--panel);
+}
+figcaption { font: 500 11.5px/1.35 var(--font-mono); color: var(--muted); }
+.insp-text { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.insp-text p { margin: 0; font-size: 14px; max-width: 64ch; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 18px; font: 500 13px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; }
+.stats span { white-space: nowrap; }
+.stats em { font-style: normal; color: var(--muted); }
+.chip-group { display: grid; gap: 6px; }
+.chip-label { font: 500 11.5px/1.3 var(--font-mono); color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 500 12.5px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  padding: 6px 9px; border-radius: 3px;
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--muted); }
+.chip i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.chip.pos i { background: var(--for); }
+.chip.neg i { background: var(--against); }
+
+/* How it works */
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 12px 40px; grid-template-columns: minmax(0, 1fr); font-size: 14px; }
+@media (min-width: 760px) { .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1140px) { .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.steps li::marker { font: 600 13px var(--font-mono); color: var(--muted); }
+.steps strong { font-weight: 600; }
+code { font: 500 12.5px var(--font-mono); background: var(--grid); padding: 1px 4px; border-radius: 3px; white-space: nowrap; }
+.fine { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 110ch; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) { .bar-row .fill { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Neural Digit Reader</h1>
+      <p class="lede">Draw a digit from 0 to 9. A small neural network reads it as you draw and shows its working: which neurons fire, which strokes count as evidence, and how sure it is.</p>
+    </div>
+    <p class="spec"><b>784 → 64 → 32 → 10</b> neurons · __PARAMS__ weights<br>__TEST_ACC__ correct on 10,000 unseen MNIST digits</p>
+  </header>
+
+  <main class="grid">
+    <section class="card pad-card" aria-labelledby="pad-h">
+      <div class="card-head"><h2 id="pad-h">Your drawing</h2></div>
+      <div class="pad-wrap" id="pad-wrap">
+        <canvas id="pad" role="img" aria-label="Drawing pad. Draw one digit with a mouse, finger or stylus."></canvas>
+        <div class="pad-empty" id="pad-empty" hidden>Draw one digit here,<br>any size</div>
+        <div class="pad-tag" id="pad-tag" hidden>Example</div>
+      </div>
+      <div class="controls">
+        <button type="button" class="btn primary" id="clear" title="Clear the pad (Esc)">Clear</button>
+        <button type="button" class="btn" id="undo" title="Undo the last stroke (Ctrl+Z)">Undo</button>
+        <button type="button" class="btn" id="example" title="Watch an example digit being drawn">Example</button>
+      </div>
+      <p class="pad-note" id="pad-note">Mouse, finger or stylus. The answer updates with every stroke.</p>
+    </section>
+
+    <section class="card answer-card" aria-labelledby="ans-h">
+      <div class="card-head"><h2 id="ans-h">The network’s answer</h2></div>
+      <div class="readout">
+        <div class="big idle" id="big" aria-hidden="true">?</div>
+        <div class="verdict">
+          <p id="verdict">Waiting for a digit</p>
+          <p id="runner">Draw anything from 0 to 9 on the pad.</p>
+        </div>
+      </div>
+      <ol class="bars" id="bars" aria-label="Probability for each digit"></ol>
+      <p class="answer-foot">Tap a digit to see the evidence for it.</p>
+      <p class="sr-only" id="announce" aria-live="polite"></p>
+    </section>
+
+    <section class="card net-card" aria-labelledby="net-h">
+      <div class="card-head">
+        <h2 id="net-h">Inside the network</h2>
+        <div class="legend" aria-hidden="true">
+          <span class="lg-on"><i></i>firing</span>
+          <span class="lg-off"><i></i>silent</span>
+          <span class="lg-for"><i></i>pushes up</span>
+          <span class="lg-against"><i></i>pushes down</span>
+        </div>
+      </div>
+      <div class="net-wrap" id="net-wrap">
+        <canvas id="net" tabindex="-1" role="img" aria-label="Diagram of the network's neurons and the connections carrying the most evidence."></canvas>
+      </div>
+      <p class="caption" id="net-caption"></p>
+    </section>
+
+    <section class="card inspect-card" aria-labelledby="insp-h">
+      <div class="card-head">
+        <h2 id="insp-h">Neuron inspector</h2>
+        <button type="button" class="btn small" id="follow" hidden>Back to the guess</button>
+      </div>
+      <div class="insp-title"><h3 id="insp-name">Nothing to inspect yet</h3><span class="badge" id="insp-badge" hidden>the guess</span></div>
+      <div class="insp-body">
+        <figure><canvas class="map" id="map-looks" width="28" height="28"></canvas><figcaption>Where more ink would help or hurt</figcaption></figure>
+        <figure><canvas class="map" id="map-found" width="28" height="28"></canvas><figcaption>What it found in your drawing</figcaption></figure>
+        <div class="insp-text">
+          <div class="stats" id="insp-stats"></div>
+          <p id="insp-explain">Draw a digit, then tap any neuron in the diagram or any digit in the answer to see what it responds to.</p>
+          <div id="insp-chips"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card how-card" aria-labelledby="how-h">
+      <h2 id="how-h">How it reads a digit</h2>
+      <ol class="steps">
+        <li><strong>Shrink.</strong> Your strokes are scaled into a 20 × 20 box and centred by their centre of mass on a 28 × 28 grid, the way the MNIST training digits were prepared. That gives 784 numbers from 0 (blank) to 1 (ink).</li>
+        <li><strong>Layer 1.</strong> Each of 64 neurons multiplies every pixel by its own weight, adds a bias and fires only if the total is positive: <code>max(0, w·x + b)</code>.</li>
+        <li><strong>Layer 2.</strong> 32 neurons do the same with layer 1’s outputs, building bigger patterns from smaller ones.</li>
+        <li><strong>Output.</strong> Ten neurons, one per digit, each produce a score. Softmax turns the scores into probabilities that add up to 100%.</li>
+      </ol>
+      <p class="fine">Trained from scratch in NumPy on 55,000 MNIST digits. Half of every training pass used digits re-drawn as pen strokes with random slant, wobble and pen size, plus flagged European 1s, so mouse and finger drawings look familiar. __REDRAW_ACC__ correct on the test digits re-drawn that way. It runs entirely in your browser.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+"use strict";
+const META = __META__;
+const EXAMPLES = __EXAMPLES__;
+const MODEL_B64 = "__MODEL__";
+
+const $ = (s) => document.querySelector(s);
+const MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
+const [N0, N1, N2, N3] = META.sizes;
+
+/* ---------- Weights: float32, little-endian: W1 b1 W2 b2 W3 b3 (W row-major [out][in]) ---------- */
+const bin = atob(MODEL_B64);
+const bytes = new Uint8Array(bin.length);
+for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+let off = 0;
+const take = (n) => { const a = new Float32Array(bytes.buffer, off, n); off += 4 * n; return a; };
+const W1 = take(N1 * N0), B1 = take(N1), W2 = take(N2 * N1), B2 = take(N2), W3 = take(N3 * N2), B3 = take(N3);
+
+/* ---------- Strokes -> 28x28 input. Line-for-line port of strokes.py (render, normalize). ---------- */
+function render(segs, n, R, S) {
+  const F = 28 * S;
+  const fine = new Float32Array(F * F);
+  const inv = 1.0 / S;
+  const pad = R + inv;
+  for (let k = 0; k < n; k++) {
+    const x0 = segs[4 * k], y0 = segs[4 * k + 1], x1 = segs[4 * k + 2], y1 = segs[4 * k + 3];
+    const u0 = Math.max(0, Math.floor((Math.min(x0, x1) - pad) * S));
+    const u1 = Math.min(F - 1, Math.floor((Math.max(x0, x1) + pad) * S));
+    const v0 = Math.max(0, Math.floor((Math.min(y0, y1) - pad) * S));
+    const v1 = Math.min(F - 1, Math.floor((Math.max(y0, y1) + pad) * S));
+    const dx = x1 - x0, dy = y1 - y0;
+    const L2 = dx * dx + dy * dy;
+    for (let v = v0; v <= v1; v++) {
+      const py = (v + 0.5) * inv;
+      for (let u = u0; u <= u1; u++) {
+        const px = (u + 0.5) * inv;
+        let t = 0.0;
+        if (L2 > 0.0) {
+          t = ((px - x0) * dx + (py - y0) * dy) / L2;
+          if (t < 0.0) t = 0.0; else if (t > 1.0) t = 1.0;
+        }
+        const qx = x0 + t * dx - px, qy = y0 + t * dy - py;
+        const d = Math.sqrt(qx * qx + qy * qy);
+        let c = (R - d) * S + 0.5;
+        if (c > 1.0) c = 1.0;
+        const idx = v * F + u;
+        if (c > fine[idx]) fine[idx] = c;
+      }
+    }
+  }
+  const img = new Float32Array(784);
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      let acc = 0.0;
+      for (let j = 0; j < S; j++) {
+        const row = (y * S + j) * F + x * S;
+        for (let i = 0; i < S; i++) acc += fine[row + i];
+      }
+      img[y * 28 + x] = acc / (S * S);
+    }
+  }
+  return img;
+}
+
+function normalize(raw, n, R, S, tx, ty) {
+  let minx = 1e30, maxx = -1e30, miny = 1e30, maxy = -1e30;
+  for (let k = 0; k < n; k++) {
+    for (let e = 0; e < 2; e++) {
+      const x = raw[4 * k + 2 * e], y = raw[4 * k + 2 * e + 1];
+      if (x < minx) minx = x;
+      if (x > maxx) maxx = x;
+      if (y < miny) miny = y;
+      if (y > maxy) maxy = y;
+    }
+  }
+  const L = Math.max(maxx - minx, maxy - miny);
+  let s = 0.0;
+  if (L > 1e-9) s = (20.0 - 2.0 * R) / L;
+  const cx = (minx + maxx) * 0.5, cy = (miny + maxy) * 0.5;
+  const segs = new Float64Array(4 * n);
+  for (let k = 0; k < n; k++) {
+    segs[4 * k] = (raw[4 * k] - cx) * s + 14.0;
+    segs[4 * k + 1] = (raw[4 * k + 1] - cy) * s + 14.0;
+    segs[4 * k + 2] = (raw[4 * k + 2] - cx) * s + 14.0;
+    segs[4 * k + 3] = (raw[4 * k + 3] - cy) * s + 14.0;
+  }
+  let img = render(segs, n, R, S);
+  let tot = 0.0, mx = 0.0, my = 0.0;
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      const val = img[y * 28 + x];
+      tot += val;
+      mx += val * (x + 0.5);
+      my += val * (y + 0.5);
+    }
+  }
+  if (tot > 0.0) {
+    const ox = tx - mx / tot, oy = ty - my / tot;
+    for (let k = 0; k < n; k++) {
+      segs[4 * k] += ox; segs[4 * k + 2] += ox;
+      segs[4 * k + 1] += oy; segs[4 * k + 3] += oy;
+    }
+    img = render(segs, n, R, S);
+  }
+  return img;
+}
+
+function strokesToRaw(strokes) {
+  let n = 0;
+  for (const s of strokes) if (s.length) n += s.length > 1 ? s.length - 1 : 1;
+  const raw = new Float64Array(4 * n);
+  let k = 0;
+  for (const s of strokes) {
+    if (!s.length) continue;
+    if (s.length === 1) {
+      raw[4 * k] = s[0][0]; raw[4 * k + 1] = s[0][1]; raw[4 * k + 2] = s[0][0]; raw[4 * k + 3] = s[0][1]; k++;
+    } else {
+      for (let i = 0; i + 1 < s.length; i++) {
+        raw[4 * k] = s[i][0]; raw[4 * k + 1] = s[i][1]; raw[4 * k + 2] = s[i + 1][0]; raw[4 * k + 3] = s[i + 1][1]; k++;
+      }
+    }
+  }
+  return { raw, n };
+}
+
+function toInput(strokes) {
+  const { raw, n } = strokesToRaw(strokes);
+  return normalize(raw, n, META.R, META.S, META.TX, META.TY);
+}
+
+/* ---------- Forward pass ---------- */
+function forward(x) {
+  const nz = [];
+  for (let p = 0; p < N0; p++) if (x[p] !== 0) nz.push(p);
+  const z1 = new Float64Array(N1), a1 = new Float64Array(N1);
+  for (let i = 0; i < N1; i++) {
+    let s = B1[i];
+    const o = i * N0;
+    for (let q = 0; q < nz.length; q++) s += W1[o + nz[q]] * x[nz[q]];
+    z1[i] = s; a1[i] = s > 0 ? s : 0;
+  }
+  const z2 = new Float64Array(N2), a2 = new Float64Array(N2);
+  for (let j = 0; j < N2; j++) {
+    let s = B2[j];
+    const o = j * N1;
+    for (let i = 0; i < N1; i++) s += W2[o + i] * a1[i];
+    z2[j] = s; a2[j] = s > 0 ? s : 0;
+  }
+  const z3 = new Float64Array(N3);
+  for (let k = 0; k < N3; k++) {
+    let s = B3[k];
+    const o = k * N2;
+    for (let j = 0; j < N2; j++) s += W3[o + j] * a2[j];
+    z3[k] = s;
+  }
+  let m = -Infinity;
+  for (let k = 0; k < N3; k++) m = Math.max(m, z3[k]);
+  const p = new Float64Array(N3);
+  let tot = 0;
+  for (let k = 0; k < N3; k++) { p[k] = Math.exp((z3[k] - m) / META.T); tot += p[k]; }
+  let pred = 0;
+  for (let k = 0; k < N3; k++) { p[k] /= tot; if (p[k] > p[pred]) pred = k; }
+  return { x, z1, a1, z2, a2, z3, p, pred };
+}
+
+/* ---------- Explanations ----------
+   A ReLU network is exactly linear while its on/off pattern stays fixed, so any
+   neuron's value = sum over pixels of (ink x sensitivity) + a constant. "Looks for"
+   is that sensitivity map; "found" is ink x sensitivity. Edge values are the
+   matching path contributions, so the picture adds up to the real numbers. */
+function explain(net, t) {
+  const { a1, z1, a2, z2, x } = net;
+  const Ein = new Float64Array(N1), E12 = new Float64Array(N2 * N1), E23 = new Float64Array(N3 * N2);
+  const gx = new Float64Array(N0);
+  let g1 = null;
+  if (t.kind === "out") {
+    const k = t.idx;
+    const g2 = new Float64Array(N2);
+    for (let j = 0; j < N2; j++) g2[j] = z2[j] > 0 ? W3[k * N2 + j] : 0;
+    g1 = new Float64Array(N1);
+    for (let i = 0; i < N1; i++) {
+      if (z1[i] <= 0) continue;
+      let s = 0;
+      for (let j = 0; j < N2; j++) s += g2[j] * W2[j * N1 + i];
+      g1[i] = s;
+    }
+    for (let i = 0; i < N1; i++) Ein[i] = a1[i] * g1[i];
+    for (let j = 0; j < N2; j++) {
+      if (g2[j] === 0) continue;
+      for (let i = 0; i < N1; i++) E12[j * N1 + i] = a1[i] * W2[j * N1 + i] * g2[j];
+    }
+    for (let j = 0; j < N2; j++) E23[k * N2 + j] = a2[j] * W3[k * N2 + j];
+  } else if (t.kind === "h2") {
+    const j = t.idx;
+    g1 = new Float64Array(N1);
+    for (let i = 0; i < N1; i++) {
+      g1[i] = z1[i] > 0 ? W2[j * N1 + i] : 0;
+      Ein[i] = a1[i] * W2[j * N1 + i];
+      E12[j * N1 + i] = Ein[i];
+    }
+    for (let k = 0; k < N3; k++) E23[k * N2 + j] = a2[j] * W3[k * N2 + j];
+  } else {
+    const i = t.idx;
+    Ein[i] = a1[i];
+    for (let j = 0; j < N2; j++) E12[j * N1 + i] = a1[i] * W2[j * N1 + i];
+    for (let j = 0; j < N2; j++) {
+      if (z2[j] <= 0) continue;
+      const c = E12[j * N1 + i];
+      for (let k = 0; k < N3; k++) E23[k * N2 + j] = c * W3[k * N2 + j];
+    }
+  }
+  if (t.kind === "h1") {
+    for (let p = 0; p < N0; p++) gx[p] = W1[t.idx * N0 + p];
+  } else {
+    for (let i = 0; i < N1; i++) {
+      const g = g1[i];
+      if (g === 0) continue;
+      const o = i * N0;
+      for (let p = 0; p < N0; p++) gx[p] += g * W1[o + p];
+    }
+  }
+  const found = new Float64Array(N0);
+  let foundSum = 0;
+  for (let p = 0; p < N0; p++) { found[p] = x[p] * gx[p]; foundSum += found[p]; }
+  return { Ein, E12, E23, gx, found, foundSum };
+}
+
+/* ---------- State ---------- */
+const state = {
+  strokes: [],
+  isExample: false,
+  drawing: null,
+  pointerId: null,
+  net: null,
+  expl: null,
+  target: null,     // null = follow the guess; else {kind: "out"|"h2"|"h1", idx}
+  hover: null,
+  anim: null,
+  exampleOrder: [],
+};
+const currentTarget = () => state.target || (state.net ? { kind: "out", idx: state.net.pred } : null);
+const sameT = (a, b) => (!a && !b) || (a && b && a.kind === b.kind && a.idx === b.idx);
+
+/* ---------- Theme colours (read from the CSS tokens) ---------- */
+const C = {};
+function parseColor(str) {
+  const s = str.trim();
+  if (s[0] === "#") {
+    let h = s.slice(1);
+    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    const n = parseInt(h.slice(0, 6), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = s.match(/[\d.]+/g);
+  return m ? m.slice(0, 3).map(Number) : [128, 128, 128];
+}
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["paper", "panel", "ink", "muted", "rule", "grid", "for", "against"]) C[k] = parseColor(cs.getPropertyValue("--" + k));
+}
+const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+/* ---------- Drawing pad ---------- */
+const pad = $("#pad"), padCtx = pad.getContext("2d");
+let padSize = 1;
+function sizePad() {
+  const r = pad.getBoundingClientRect();
+  if (!r.width) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  padSize = r.width;
+  pad.width = Math.round(r.width * dpr);
+  pad.height = Math.round(r.height * dpr);
+  padCtx.setTransform(pad.width / r.width, 0, 0, pad.height / r.height, 0, 0);
+}
+function drawPad() {
+  padCtx.save();
+  padCtx.setTransform(1, 0, 0, 1, 0, 0);
+  padCtx.clearRect(0, 0, pad.width, pad.height);
+  padCtx.restore();
+  const S = padSize;
+  padCtx.strokeStyle = rgba(C.ink, 1);
+  padCtx.fillStyle = rgba(C.ink, 1);
+  padCtx.lineWidth = Math.max(6, S * 0.048);
+  padCtx.lineCap = "round";
+  padCtx.lineJoin = "round";
+  for (const s of state.strokes) {
+    if (!s.length) continue;
+    if (s.length === 1) {
+      padCtx.beginPath();
+      padCtx.arc(s[0][0] * S, s[0][1] * S, padCtx.lineWidth / 2, 0, Math.PI * 2);
+      padCtx.fill();
+      continue;
+    }
+    padCtx.beginPath();
+    padCtx.moveTo(s[0][0] * S, s[0][1] * S);
+    for (let i = 1; i < s.length; i++) padCtx.lineTo(s[i][0] * S, s[i][1] * S);
+    padCtx.stroke();
+  }
+  $("#pad-empty").hidden = state.strokes.length > 0;
+  $("#pad-tag").hidden = !state.isExample;
+  const note = state.isExample ? "This is an example. Start drawing to replace it, or press Clear." : "Mouse, finger or stylus. The answer updates with every stroke.";
+  const noteEl = $("#pad-note");
+  if (noteEl.textContent !== note) noteEl.textContent = note;
+}
+
+function padPoint(e) {
+  const r = pad.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+  return [x, y];
+}
+pad.addEventListener("pointerdown", (e) => {
+  if (state.pointerId !== null || e.button > 0) return;
+  e.preventDefault();
+  stopAnim();
+  if (state.isExample) { state.strokes = []; state.isExample = false; state.target = null; }
+  state.pointerId = e.pointerId;
+  try { pad.setPointerCapture(e.pointerId); } catch (_) { /* capture is optional */ }
+  state.drawing = [padPoint(e)];
+  state.strokes.push(state.drawing);
+  schedule();
+});
+pad.addEventListener("pointermove", (e) => {
+  if (e.pointerId !== state.pointerId || !state.drawing) return;
+  const list = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+  for (const ev of list) {
+    const p = padPoint(ev);
+    const last = state.drawing[state.drawing.length - 1];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) > 0.0025) state.drawing.push(p);
+  }
+  schedule();
+});
+function endStroke(e) {
+  if (e.pointerId !== state.pointerId) return;
+  state.pointerId = null;
+  state.drawing = null;
+  schedule();
+  announce();
+}
+pad.addEventListener("pointerup", endStroke);
+pad.addEventListener("pointercancel", endStroke);
+
+function clearPad() {
+  stopAnim();
+  state.strokes = [];
+  state.isExample = false;
+  state.target = null;
+  state.pointerId = null;
+  state.drawing = null;
+  schedule();
+  announce("Pad cleared.");
+}
+function undo() {
+  stopAnim();
+  if (!state.strokes.length) return;
+  state.strokes.pop();
+  state.isExample = false;
+  if (!state.strokes.length) state.target = null;
+  schedule();
+  announce();
+}
+$("#clear").addEventListener("click", clearPad);
+$("#undo").addEventListener("click", undo);
+$("#example").addEventListener("click", () => showExample(true));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { clearPad(); }
+  else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+});
+
+/* ---------- Examples ---------- */
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+function exampleStrokes(ex) {
+  return ex.strokes.map((s) => s.map(([x, y]) => [0.15 + 0.7 * x / 100, 0.15 + 0.7 * y / 100]));
+}
+function nextExample() {
+  if (!state.exampleOrder.length) {
+    const idx = EXAMPLES.map((_, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+    state.exampleOrder = idx;
+  }
+  return EXAMPLES[state.exampleOrder.pop()];
+}
+function stopAnim() {
+  if (state.anim) { cancelAnimationFrame(state.anim.raf); state.anim = null; }
+}
+function showExample(animate, ex) {
+  stopAnim();
+  ex = ex || nextExample();
+  const full = exampleStrokes(ex);
+  state.target = null;
+  state.isExample = true;
+  if (!animate || reduceMotion.matches) {
+    state.strokes = full.map((s) => s.slice());
+    schedule();
+    announce();
+    return;
+  }
+  // Draw at a steady pen speed, pausing briefly between strokes.
+  const lens = full.map((s) => s.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - s[i][0], p[1] - s[i][1]), 0));
+  const total = lens.reduce((a, b) => a + b, 0);
+  const speed = total / 1.1;                 // pad widths per second
+  const pause = 0.14;
+  const start = performance.now();
+  state.strokes = [];
+  const tick = (now) => {
+    let t = (now - start) / 1000;
+    const out = [];
+    let done = true;
+    for (let si = 0; si < full.length; si++) {
+      const s = full[si];
+      let budget = t * speed;
+      if (budget <= 0) { done = false; break; }
+      const part = [s[0]];
+      let used = 0;
+      for (let i = 1; i < s.length; i++) {
+        const seg = Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+        if (used + seg <= budget) { part.push(s[i]); used += seg; }
+        else {
+          const f = (budget - used) / seg;
+          part.push([s[i - 1][0] + (s[i][0] - s[i - 1][0]) * f, s[i - 1][1] + (s[i][1] - s[i - 1][1]) * f]);
+          used = budget;
+          break;
+        }
+      }
+      out.push(part);
+      if (used < lens[si] - 1e-9) { done = false; break; }
+      t -= lens[si] / speed + pause;
+    }
+    state.strokes = out;
+    state.isExample = true;
+    update();
+    if (done) { state.anim = null; state.strokes = full.map((s) => s.slice()); update(); announce(); return; }
+    state.anim.raf = requestAnimationFrame(tick);
+  };
+  state.anim = { raf: requestAnimationFrame(tick) };
+}
+
+/* ---------- Network diagram ---------- */
+const netCv = $("#net"), netCtx = netCv.getContext("2d");
+const L = {};
+const inputTile = document.createElement("canvas");
+inputTile.width = 28; inputTile.height = 28;
+function layoutNet() {
+  const w = netCv.parentElement.clientWidth;
+  if (!w) return;
+  const h = Math.round(Math.min(470, Math.max(310, w * 0.66)));
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  netCv.style.height = h + "px";
+  netCv.width = Math.round(w * dpr);
+  netCv.height = Math.round(h * dpr);
+  netCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const top = 44, bottom = 10, side = 2;
+  const avail = h - top - bottom;
+  const sIn = Math.round(Math.max(58, Math.min(w * 0.2, avail * 0.46, 126)));
+  const rows1 = Math.ceil(N1 / 2);
+  const sp1 = avail / rows1, sp2 = avail / N2, sp3 = avail / N3;
+  const r1 = Math.max(2.2, Math.min(4.8, sp1 * 0.4));
+  const r2 = Math.max(2.4, Math.min(5.4, sp2 * 0.42));
+  const r3 = Math.max(8.5, Math.min(14, sp3 * 0.37));
+  const xIn0 = side, xIn1 = side + sIn;
+  const xOut = w - side - r3 - 2;
+  const span = xOut - r3 - xIn1;
+  const xH1 = xIn1 + span * 0.33, xH2 = xIn1 + span * 0.7;
+  const dx1 = Math.max(r1 * 2.6, 6);
+  const h1 = [], h2 = [], out = [];
+  for (let i = 0; i < N1; i++) {
+    const col = i & 1, row = i >> 1;
+    h1.push([xH1 + (col ? dx1 / 2 : -dx1 / 2), top + (row + (col ? 0.75 : 0.25)) * sp1]);
+  }
+  for (let j = 0; j < N2; j++) h2.push([xH2, top + (j + 0.5) * sp2]);
+  for (let k = 0; k < N3; k++) out.push([xOut, top + (k + 0.5) * sp3]);
+  Object.assign(L, { w, h, top, avail, sIn, xIn0, xIn1, yIn0: top + (avail - sIn) / 2, r1, r2, r3, dx1, xH1, xH2, xOut, h1, h2, out });
+}
+
+function maxAbs(a) { let m = 0; for (let i = 0; i < a.length; i++) { const v = Math.abs(a[i]); if (v > m) m = v; } return m; }
+
+function drawEdges(list, cap) {
+  list.sort((a, b) => Math.abs(a[4]) - Math.abs(b[4]));
+  if (cap && list.length > cap) list = list.slice(list.length - cap);
+  const ctx = netCtx;
+  ctx.lineCap = "round";
+  for (const [x0, y0, x1, y1, t] of list) {
+    const a = Math.abs(t);
+    ctx.strokeStyle = rgba(t > 0 ? C.for : C.against, (0.1 + 0.85 * Math.pow(a, 0.8)).toFixed(3));
+    ctx.lineWidth = 0.6 + 2.3 * a;
+    ctx.beginPath();
+    const mx = (x0 + x1) / 2;
+    ctx.moveTo(x0, y0);
+    ctx.bezierCurveTo(mx, y0, mx, y1, x1, y1);
+    ctx.stroke();
+  }
+}
+
+function colLabel(text, sub, x) {
+  const ctx = netCtx;
+  ctx.font = "600 10.5px " + MONO;
+  const w = Math.max(ctx.measureText(text).width, ctx.measureText(sub).width);
+  const cx = Math.min(L.w - w / 2 - 1, Math.max(w / 2 + 1, x));
+  ctx.textAlign = "center";
+  ctx.fillStyle = rgba(C.muted, 1);
+  ctx.fillText(text, cx, 14);
+  ctx.font = "500 10.5px " + MONO;
+  ctx.fillStyle = rgba(C.ink, 1);
+  ctx.fillText(sub, cx, 28);
+}
+
+function neuronName(t) {
+  return t.kind === "out" ? `Digit ${t.idx}` : `${t.kind === "h1" ? "L1" : "L2"} #${t.idx + 1}`;
+}
+
+function drawNet() {
+  if (!L.w) return;
+  const ctx = netCtx, net = state.net, ex = state.expl, tgt = currentTarget();
+  ctx.clearRect(0, 0, L.w, L.h);
+  colLabel("INPUT", "784", (L.xIn0 + L.xIn1) / 2);
+  colLabel("LAYER 1", String(N1), L.xH1);
+  colLabel("LAYER 2", String(N2), L.xH2);
+  colLabel("OUTPUT", String(N3), L.xOut);
+
+  if (net && ex) {
+    const midY = L.top + L.avail / 2;
+    let m = maxAbs(ex.Ein);
+    if (m > 0) {
+      const fan = [];
+      for (let i = 0; i < N1; i++) {
+        const v = ex.Ein[i];
+        if (v === 0 || Math.abs(v) < 0.03 * m) continue;
+        const [x, y] = L.h1[i];
+        const ys = L.yIn0 + L.sIn / 2 + (y - midY) * (L.sIn / L.avail) * 0.92;
+        fan.push([L.xIn1 + 1, ys, x - L.r1 - 1, y, v / m]);
+      }
+      drawEdges(fan);
+    }
+    m = maxAbs(ex.E12);
+    if (m > 0) {
+      const e = [];
+      for (let j = 0; j < N2; j++) for (let i = 0; i < N1; i++) {
+        const v = ex.E12[j * N1 + i];
+        if (v === 0 || Math.abs(v) < 0.05 * m) continue;
+        e.push([L.h1[i][0] + L.r1, L.h1[i][1], L.h2[j][0] - L.r2, L.h2[j][1], v / m]);
+      }
+      drawEdges(e, 260);
+    }
+    m = maxAbs(ex.E23);
+    if (m > 0) {
+      const e = [];
+      for (let k = 0; k < N3; k++) for (let j = 0; j < N2; j++) {
+        const v = ex.E23[k * N2 + j];
+        if (v === 0 || Math.abs(v) < 0.04 * m) continue;
+        e.push([L.h2[j][0] + L.r2, L.h2[j][1], L.out[k][0] - L.r3, L.out[k][1], v / m]);
+      }
+      drawEdges(e, 160);
+    }
+  }
+
+  // Input image: what the network actually sees
+  const ictx = inputTile.getContext("2d");
+  const id = ictx.createImageData(28, 28);
+  for (let p = 0; p < 784; p++) {
+    const v = net ? net.x[p] : 0;
+    const c = mix(C.panel, C.ink, v);
+    id.data[4 * p] = c[0]; id.data[4 * p + 1] = c[1]; id.data[4 * p + 2] = c[2]; id.data[4 * p + 3] = 255;
+  }
+  ictx.putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(inputTile, L.xIn0, L.yIn0, L.sIn, L.sIn);
+  ctx.strokeStyle = rgba(C.rule, 1);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(L.xIn0 + 0.5, L.yIn0 + 0.5, L.sIn - 1, L.sIn - 1);
+  ctx.font = "500 10px " + MONO;
+  ctx.fillStyle = rgba(C.muted, 1);
+  ctx.textAlign = "center";
+  ctx.fillText("what it sees", L.xIn0 + L.sIn / 2, L.yIn0 + L.sIn + 14);
+
+  const ring = (x, y, r, strong) => {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = rgba(strong ? C.ink : C.muted, 1);
+    ctx.lineWidth = strong ? 1.8 : 1.2;
+    ctx.stroke();
+  };
+  const dot = (pos, r, a, z, scale, kind, idx) => {
+    const [x, y] = pos;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(C.panel, 1);
+    ctx.fill();
+    if (net && z > 0) {
+      ctx.fillStyle = rgba(C.ink, (0.22 + 0.78 * Math.min(1, a / scale)).toFixed(3));
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = rgba(C.muted, 0.6);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    if (tgt && tgt.kind === kind && tgt.idx === idx) ring(x, y, r + 3, true);
+    else if (state.hover && state.hover.kind === kind && state.hover.idx === idx) ring(x, y, r + 3, false);
+  };
+  for (let i = 0; i < N1; i++) dot(L.h1[i], L.r1, net ? net.a1[i] : 0, net ? net.z1[i] : 0, META.scale1, "h1", i);
+  for (let j = 0; j < N2; j++) dot(L.h2[j], L.r2, net ? net.a2[j] : 0, net ? net.z2[j] : 0, META.scale2, "h2", j);
+
+  for (let k = 0; k < N3; k++) {
+    const [x, y] = L.out[k];
+    const p = net ? net.p[k] : 0;
+    ctx.beginPath();
+    ctx.arc(x, y, L.r3, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(C.panel, 1);
+    ctx.fill();
+    if (p > 0.004) { ctx.fillStyle = rgba(C.ink, (0.1 + 0.9 * p).toFixed(3)); ctx.fill(); }
+    ctx.strokeStyle = rgba(C.ink, 0.35);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = rgba(p > 0.55 ? C.panel : C.ink, 1);
+    ctx.font = `600 ${Math.round(L.r3 * 1.05)}px ${MONO}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(k), x, y + 0.5);
+    ctx.textBaseline = "alphabetic";
+    if (tgt && tgt.kind === "out" && tgt.idx === k) ring(x, y, L.r3 + 3.5, true);
+    else if (state.hover && state.hover.kind === "out" && state.hover.idx === k) ring(x, y, L.r3 + 3.5, false);
+  }
+
+  // Hover label (mouse only)
+  if (state.hover && net) {
+    const t = state.hover;
+    const pos = t.kind === "h1" ? L.h1[t.idx] : t.kind === "h2" ? L.h2[t.idx] : L.out[t.idx];
+    const val = t.kind === "h1" ? net.a1[t.idx] : t.kind === "h2" ? net.a2[t.idx] : net.p[t.idx];
+    const text = t.kind === "out" ? `${neuronName(t)} · ${fmtPct(val)}` : `${neuronName(t)} · ${val > 0 ? val.toFixed(2) : "silent"}`;
+    ctx.font = "500 11.5px " + MONO;
+    const tw = ctx.measureText(text).width + 14;
+    let bx = pos[0] + 12;
+    if (bx + tw > L.w - 2) bx = pos[0] - 12 - tw;
+    const by = Math.min(L.h - 26, Math.max(2, pos[1] - 12));
+    ctx.fillStyle = rgba(C.panel, 0.96);
+    ctx.strokeStyle = rgba(C.rule, 1);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(bx + 0.5, by + 0.5, tw, 23);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = rgba(C.ink, 1);
+    ctx.textAlign = "left";
+    ctx.fillText(text, bx + 7.5, by + 16);
+  }
+}
+
+function hitNet(x, y) {
+  let best = null, bd = Infinity;
+  const consider = (kind, idx, pos, r) => {
+    const d = Math.hypot(pos[0] - x, pos[1] - y);
+    if (d < Math.max(r + 5, 9) && d < bd) { bd = d; best = { kind, idx }; }
+  };
+  (L.h1 || []).forEach((p, i) => consider("h1", i, p, L.r1));
+  (L.h2 || []).forEach((p, j) => consider("h2", j, p, L.r2));
+  (L.out || []).forEach((p, k) => consider("out", k, p, L.r3));
+  return best;
+}
+netCv.addEventListener("pointermove", (e) => {
+  if (e.pointerType !== "mouse") return;
+  const r = netCv.getBoundingClientRect();
+  const hit = hitNet(e.clientX - r.left, e.clientY - r.top);
+  if (!sameT(hit, state.hover)) {
+    state.hover = hit;
+    netCv.style.cursor = hit ? "pointer" : "default";
+    drawNet();
+  }
+});
+netCv.addEventListener("pointerleave", () => { if (state.hover) { state.hover = null; drawNet(); } });
+netCv.addEventListener("click", (e) => {
+  const r = netCv.getBoundingClientRect();
+  const hit = hitNet(e.clientX - r.left, e.clientY - r.top);
+  if (hit) select(hit);
+});
+
+function select(t) {
+  if (!state.net) return;
+  state.target = t;
+  update();
+}
+$("#follow").addEventListener("click", () => { state.target = null; update(); });
+
+/* ---------- Answer ---------- */
+const fmtPct = (v) => v >= 0.9995 ? ">99.9%" : v < 0.0005 ? "<0.1%" : (v * 100).toFixed(1) + "%";
+const signed = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
+const barRows = [];
+(function buildBars() {
+  const ol = $("#bars");
+  for (let k = 0; k < N3; k++) {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "bar-row";
+    b.innerHTML = `<span class="d">${k}</span><span class="track"><span class="fill"></span></span><span class="pct">–</span>`;
+    b.addEventListener("click", () => select({ kind: "out", idx: k }));
+    li.appendChild(b);
+    ol.appendChild(li);
+    barRows.push({ el: b, fill: b.querySelector(".fill"), pct: b.querySelector(".pct") });
+  }
+})();
+
+function verdictText(p, top, second) {
+  const pt = p[top];
+  if (pt >= 0.9) return `Confident it’s a ${top}`;
+  if (pt >= 0.65) return `Probably a ${top}`;
+  if (pt >= 0.4) return `Torn between ${top} and ${second}`;
+  return `Unsure, best guess ${top}`;
+}
+function renderAnswer() {
+  const net = state.net, big = $("#big"), tgt = currentTarget();
+  if (!net) {
+    big.textContent = "?";
+    big.classList.add("idle");
+    $("#verdict").textContent = "Waiting for a digit";
+    $("#runner").textContent = "Draw anything from 0 to 9 on the pad.";
+    barRows.forEach((r, k) => {
+      r.fill.style.width = "0%";
+      r.pct.textContent = "–";
+      r.el.classList.remove("top", "sel");
+      r.el.disabled = true;
+      r.el.setAttribute("aria-label", `Digit ${k}`);
+    });
+    return;
+  }
+  const p = net.p;
+  const order = Array.from(p.keys()).sort((a, b) => p[b] - p[a]);
+  const top = order[0], second = order[1];
+  big.textContent = String(top);
+  big.classList.remove("idle");
+  $("#verdict").textContent = verdictText(p, top, second);
+  $("#runner").textContent = `${fmtPct(p[top])} sure · next best ${second} at ${fmtPct(p[second])}`;
+  barRows.forEach((r, k) => {
+    r.fill.style.width = (p[k] * 100).toFixed(2) + "%";
+    r.pct.textContent = fmtPct(p[k]);
+    r.el.classList.toggle("top", k === top);
+    r.el.classList.toggle("sel", !!tgt && tgt.kind === "out" && tgt.idx === k);
+    r.el.disabled = false;
+    r.el.setAttribute("aria-label", `Digit ${k}: ${fmtPct(p[k])}. Show the evidence for ${k}.`);
+  });
+}
+function announce(msg) {
+  const el = $("#announce");
+  if (msg) { el.textContent = msg; return; }
+  if (!state.strokes.length) return;
+  const net = state.net || forward(toInput(state.strokes));
+  el.textContent = `The network reads ${net.pred}, ${fmtPct(net.p[net.pred])} sure.`;
+}
+
+/* ---------- Inspector ---------- */
+const mapLooks = $("#map-looks"), mapFound = $("#map-found");
+function drawMap(cv, vals, norm, x) {
+  const ctx = cv.getContext("2d");
+  const id = ctx.createImageData(28, 28);
+  for (let p = 0; p < 784; p++) {
+    let base = C.panel;
+    if (x) base = mix(C.panel, C.ink, 0.16 * x[p]);
+    let c = base;
+    if (vals && norm > 0) {
+      const t = Math.max(-1, Math.min(1, vals[p] / norm));
+      c = t >= 0 ? mix(base, C.for, Math.pow(t, 0.7)) : mix(base, C.against, Math.pow(-t, 0.7));
+    }
+    id.data[4 * p] = c[0]; id.data[4 * p + 1] = c[1]; id.data[4 * p + 2] = c[2]; id.data[4 * p + 3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+}
+/* A pen dab inks a small blob, not one pixel, so "where more ink would help"
+   is the sensitivity summed over the pen's footprint (same renderer, R and S). */
+const DAB = render(new Float64Array([14.5, 14.5, 14.5, 14.5]), 1, META.R, META.S);
+function dabMap(g) {
+  const out = new Float64Array(784);
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      let s = 0;
+      for (let dy = -2; dy <= 2; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy > 27) continue;
+        for (let dx = -2; dx <= 2; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx > 27) continue;
+          s += DAB[(14 + dy) * 28 + 14 + dx] * g[yy * 28 + xx];
+        }
+      }
+      out[y * 28 + x] = s;
+    }
+  }
+  return out;
+}
+function robustMax(a, q) {
+  const s = Array.from(a, Math.abs).sort((u, v) => u - v);
+  return s[Math.min(s.length - 1, Math.floor(q * s.length))] || 0;
+}
+function chipGroup(label, items) {
+  if (!items.length) return "";
+  const chips = items.map((c) => `<button type="button" class="chip ${c.v >= 0 ? "pos" : "neg"}" data-kind="${c.kind}" data-idx="${c.idx}"><i></i>${c.text}</button>`).join("");
+  return `<div class="chip-group"><span class="chip-label">${label}</span><div class="chips">${chips}</div></div>`;
+}
+function topContrib(vals, n, kind, fmt, nPos, nNeg) {
+  const idx = Array.from({ length: n }, (_, i) => i).filter((i) => vals[i] !== 0);
+  const pos = idx.filter((i) => vals[i] > 0).sort((a, b) => vals[b] - vals[a]).slice(0, nPos);
+  const neg = idx.filter((i) => vals[i] < 0).sort((a, b) => vals[a] - vals[b]).slice(0, nNeg);
+  return pos.concat(neg).map((i) => ({ kind, idx: i, v: vals[i], text: fmt(i, vals[i]) }));
+}
+$("#insp-chips").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip");
+  if (b) select({ kind: b.dataset.kind, idx: Number(b.dataset.idx) });
+});
+
+function renderInspector() {
+  const net = state.net, t = currentTarget(), ex = state.expl;
+  $("#follow").hidden = !(state.target && net);
+  const name = $("#insp-name"), badge = $("#insp-badge"), stats = $("#insp-stats"), expl = $("#insp-explain"), chips = $("#insp-chips");
+  if (!net || !t || !ex) {
+    name.textContent = "Nothing to inspect yet";
+    badge.hidden = true;
+    stats.innerHTML = "";
+    expl.textContent = "Draw a digit, then tap any neuron in the diagram or any digit in the answer to see what it responds to.";
+    chips.innerHTML = "";
+    drawMap(mapLooks, null, 0, null);
+    drawMap(mapFound, null, 0, null);
+    return;
+  }
+  const looks = dabMap(ex.gx);
+  drawMap(mapLooks, looks, robustMax(looks, 0.99), null);
+  drawMap(mapFound, ex.found, maxAbs(ex.found), net.x);
+  const L2name = (j) => `L2 #${j + 1}`, L1name = (i) => `L1 #${i + 1}`;
+  if (t.kind === "out") {
+    const k = t.idx, z = net.z3[k];
+    name.textContent = `Evidence for ${k}`;
+    badge.hidden = k !== net.pred;
+    stats.innerHTML = `<span><em>score</em> ${z.toFixed(2)}</span><span><em>probability</em> ${fmtPct(net.p[k])}</span><span><em>from pixels</em> ${signed(ex.foundSum)}</span><span><em>fixed offset</em> ${signed(z - ex.foundSum)}</span>`;
+    expl.textContent = `Orange pixels in your drawing raised the score for ${k} and blue pixels lowered it; together with a fixed offset they add up exactly to the score. The left map shows where a dab of extra ink would raise it (orange) or lower it (blue), given the neurons firing right now.`;
+    const contrib = new Float64Array(N2);
+    for (let j = 0; j < N2; j++) contrib[j] = ex.E23[k * N2 + j];
+    chips.innerHTML = chipGroup(`Layer-2 neurons with the biggest say on ${k}`, topContrib(contrib, N2, "h2", (j, v) => `${L2name(j)} ${signed(v)}`, 3, 2));
+  } else if (t.kind === "h2") {
+    const j = t.idx, on = net.z2[j] > 0;
+    name.textContent = `Layer 2 · neuron ${j + 1} of ${N2}`;
+    badge.hidden = true;
+    stats.innerHTML = on ? `<span><em>activation</em> ${net.a2[j].toFixed(2)}</span>` : `<span><em>silent</em> total ${signed(net.z2[j])} is below zero</span>`;
+    expl.textContent = `It weighs up the ${N1} layer-1 neurons and fires when the total is above zero. Traced back to pixels, it currently wants ink on the orange areas and none on the blue.`;
+    const votes = new Float64Array(N3);
+    for (let k = 0; k < N3; k++) votes[k] = ex.E23[k * N2 + j];
+    chips.innerHTML = chipGroup("Driven by", topContrib(ex.Ein, N1, "h1", (i, v) => `${L1name(i)} ${signed(v)}`, 3, 2)) +
+      (on ? chipGroup("Its votes", topContrib(votes, N3, "out", (k, v) => `→ ${k} ${signed(v)}`, 2, 2)) : "");
+  } else {
+    const i = t.idx, on = net.z1[i] > 0;
+    name.textContent = `Layer 1 · neuron ${i + 1} of ${N1}`;
+    badge.hidden = true;
+    stats.innerHTML = on ? `<span><em>activation</em> ${net.a1[i].toFixed(2)}</span>` : `<span><em>silent</em> total ${signed(net.z1[i])} is below zero</span>`;
+    expl.textContent = "It has one weight per pixel. Orange weights reward ink and blue weights penalise it; the neuron fires when the reward wins.";
+    const feeds = new Float64Array(N2);
+    for (let j = 0; j < N2; j++) feeds[j] = ex.E12[j * N1 + i];
+    const votes = new Float64Array(N3);
+    for (let k = 0; k < N3; k++) { let s = 0; for (let j = 0; j < N2; j++) s += ex.E23[k * N2 + j]; votes[k] = s; }
+    chips.innerHTML = on ? chipGroup("Feeds", topContrib(feeds, N2, "h2", (jj, v) => `${L2name(jj)} ${signed(v)}`, 3, 2)) +
+      chipGroup("Knock-on effect", topContrib(votes, N3, "out", (k, v) => `→ ${k} ${signed(v)}`, 2, 2)) : "";
+  }
+}
+
+function renderCaption() {
+  const t = currentTarget(), el = $("#net-caption");
+  if (!state.net || !t) { el.textContent = "Neurons fill in as they fire. Draw a digit to watch the evidence flow."; return; }
+  if (t.kind === "out") el.textContent = `Lines trace each connection’s push on the score for ${t.idx}: orange raises it, blue lowers it, and thicker means stronger. Tap any neuron or digit to follow it instead.`;
+  else if (t.kind === "h2") el.textContent = `Showing what drives layer-2 neuron ${t.idx + 1}, and how it votes on each digit.`;
+  else el.textContent = `Showing what layer-1 neuron ${t.idx + 1} passes on, and its knock-on effect on each digit.`;
+}
+
+/* ---------- Update loop ---------- */
+let raf = 0;
+function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; update(); }); }
+function update() {
+  drawPad();
+  state.net = state.strokes.length ? forward(toInput(state.strokes)) : null;
+  if (!state.net) state.target = null;
+  const t = currentTarget();
+  state.expl = state.net && t ? explain(state.net, t) : null;
+  drawNet();
+  renderAnswer();
+  renderInspector();
+  renderCaption();
+  $("#undo").disabled = !state.strokes.length;
+  $("#clear").disabled = !state.strokes.length;
+}
+
+/* ---------- Boot ---------- */
+readTheme();
+sizePad();
+layoutNet();
+showExample(false, EXAMPLES.find((e) => e.label === META.firstExample) || EXAMPLES[0]);
+update();
+new ResizeObserver(() => { sizePad(); drawPad(); }).observe($("#pad-wrap"));
+new ResizeObserver(() => { layoutNet(); drawNet(); }).observe($("#net-wrap"));
+const refreshTheme = () => { readTheme(); update(); };
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshTheme);
+new MutationObserver(refreshTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { layoutNet(); drawNet(); });
+
+/* Test hook: run the exact page pipeline on given strokes. */
+window.__digitReader = {
+  input: (strokes) => Array.from(toInput(strokes)),
+  predict: (strokes) => { const r = forward(toInput(strokes)); return { pred: r.pred, p: Array.from(r.p), z: Array.from(r.z3) }; },
+  state: () => ({ strokes: state.strokes.length, pred: state.net ? state.net.pred : null, example: state.isExample }),
+  layout: () => ({ h1: L.h1, h2: L.h2, out: L.out }),
+};
+})();
+</script>
