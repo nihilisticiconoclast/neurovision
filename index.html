@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NeuroVision</title>
+<meta name="description" content="Two handwritten-digit neural networks built from the same brief by Google's Gemini and Anthropic's Claude. Switch between them.">
+<style>
+  :root {
+    --bar: #f5f7fa;
+    --fg: #121a25;
+    --muted: #5a6677;
+    --rule: #d6dce4;
+    --track: #e3e8ee;
+    --thumb: #ffffff;
+    --focus: #1f6bcf;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bar: #0b0f15; --fg: #e6ebf2; --muted: #8e9bad; --rule: #232c39;
+      --track: #18202b; --thumb: #2b3545; --focus: #519eff;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { height: 100%; }
+  body {
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bar);
+    color: var(--fg);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @supports (height: 100dvh) { body { height: 100dvh; } }
+  .bar {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    padding: max(8px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px));
+    border-bottom: 1px solid var(--rule);
+  }
+  .name { font-weight: 700; letter-spacing: 0.01em; }
+  .switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--track); }
+  .switch button {
+    font: inherit;
+    font-weight: 600;
+    min-height: 32px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .switch button:hover { color: var(--fg); }
+  .switch button[aria-pressed="true"] { background: var(--thumb); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16); }
+  .switch button:focus-visible, .open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .about { flex: 1 1 260px; min-width: 0; color: var(--muted); font-size: 13px; }
+  .open { color: var(--muted); font-size: 13px; white-space: nowrap; text-underline-offset: 2px; }
+  .open:hover { color: var(--fg); }
+  .open .short { display: none; }
+  @media (max-width: 640px) {
+    .bar { gap: 6px 12px; }
+    .name { font-size: 13px; }
+    .switch button { padding: 0 11px; }
+    .about { display: none; }
+    .open { margin-left: auto; }
+    .open .long { display: none; }
+    .open .short { display: inline; }
+  }
+  .frames { position: relative; flex: 1 1 auto; min-height: 0; }
+  .frames iframe { position: absolute; inset: 0; display: block; width: 100%; height: 100%; border: 0; background: var(--bar); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="bar">
+  <span class="name">NeuroVision</span>
+  <div class="switch" role="group" aria-label="Version">
+    <button type="button" data-version="gemini" aria-pressed="true">Gemini</button>
+    <button type="button" data-version="claude" aria-pressed="false">Claude</button>
+  </div>
+  <span class="about" id="about"></span>
+  <a class="open" id="open" href="gemini/index.html" target="_blank" rel="noopener"><span class="long">Open on its own</span><span class="short">Full page</span></a>
+</header>
+<main class="frames">
+  <iframe id="frame-gemini" title="NeuroVision, Gemini version"></iframe>
+  <iframe id="frame-claude" title="Neural Digit Reader, Claude version" hidden></iframe>
+</main>
+<script>
+(() => {
+  const VERSIONS = {
+    gemini: {
+      src: "gemini/index.html",
+      about: "Built by Google’s Gemini. The network trains in your browser on synthetic digits each time the page loads; try the temperature slider and live re-training.",
+    },
+    claude: {
+      src: "claude/index.html",
+      about: "Built by Anthropic’s Claude. Weights trained offline on 55,000 MNIST digits; tap any digit or neuron to see the evidence behind the guess.",
+    },
+  };
+  const KEY = "neurovision-version";
+  const buttons = document.querySelectorAll(".switch button");
+
+  // Each version keeps its own frame, loaded on first view, so switching back keeps your drawing.
+  function show(version, remember) {
+    if (!VERSIONS[version]) version = "gemini";
+    for (const [name, cfg] of Object.entries(VERSIONS)) {
+      const frame = document.getElementById("frame-" + name);
+      const on = name === version;
+      if (on && !frame.getAttribute("src")) frame.src = cfg.src;
+      frame.hidden = !on;
+    }
+    buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.version === version)));
+    document.getElementById("about").textContent = VERSIONS[version].about;
+    document.getElementById("open").href = VERSIONS[version].src;
+    if (remember) {
+      try { localStorage.setItem(KEY, version); } catch (e) { /* storage is optional */ }
+      try { history.replaceState(null, "", "#" + version); } catch (e) { /* e.g. some file:// contexts */ }
+    }
+  }
+
+  buttons.forEach((b) => b.addEventListener("click", () => show(b.dataset.version, true)));
+  window.addEventListener("hashchange", () => show(location.hash.slice(1), false));
+
+  let start = location.hash.slice(1);
+  if (!VERSIONS[start]) {
+    try { start = localStorage.getItem(KEY) || "gemini"; } catch (e) { start = "gemini"; }
+  }
+  show(start, false);
+})();
+</script>
+</body>
+</html>

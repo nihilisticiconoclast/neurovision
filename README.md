@@ -8,7 +8,24 @@
 
 ---
 
-## ✨ Key Features
+## Two versions
+
+This repo holds two takes on the same brief: Google Gemini's original NeuroVision in `gemini/`, and Anthropic Claude's Neural Digit Reader in `claude/`. Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the other. Both are single HTML files that also run on their own.
+
+| | Gemini (`gemini/index.html`) | Claude (`claude/index.html`) |
+| :--- | :--- | :--- |
+| Network | `784 → 64 → 32 → 10`, ReLU, softmax | `784 → 64 → 32 → 10`, ReLU, softmax |
+| Training data | 175 synthetic digits rendered from one stroke template per digit (plus five style variants), shifted and scaled | 55,000 MNIST digits, half of them re-drawn as pen strokes with random slant, wobble and pen size |
+| Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page |
+| MNIST test set (10,000 digits) | 43.5% | 98.6% |
+| 400 MNIST test digits drawn as pen strokes, through each app's own drawing pipeline | 44.2% | 98.0% |
+| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Exact per-pixel evidence maps, evidence flow through the network, neuron inspector, animated examples |
+
+Both networks were scored on identical images. Gemini's weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, its weights can differ slightly between browsers.
+
+---
+
+## ✨ Key Features (Gemini version)
 
 ### 1. Interactive Digit Studio & MNIST Preprocessing
 - **Smooth Freehand Canvas**: Supports mouse and touch input with adjustable brush thickness (`12px`–`30px`), a one-click **Clear Canvas** action, a **Random** sample generator, and instant handwritten presets (`0`–`9`).
@@ -38,7 +55,7 @@ Displays 6 specialized structural detectors that show *how* the network decompos
 
 ## 🚀 Quick Start
 
-Because **NeuroVision** is contained in a single `index.html` file, no build step or server installation is required.
+Because each version is a single HTML file, no build step or server installation is required. The root `index.html` holds the version switcher; `gemini/index.html` and `claude/index.html` also open on their own.
 
 ### Option 1: Open Directly
 1. Clone this repository:
@@ -68,6 +85,16 @@ Then visit `http://localhost:8080` in your browser.
 | **Hidden Layer 1** | `64` Neurons | $\text{ReLU}(x) = \max(0, x)$ | Primary stroke, edge, and quadrant loop extraction |
 | **Hidden Layer 2** | `32` Neurons | $\text{ReLU}(x) = \max(0, x)$ | High-level topological combinations |
 | **Output Layer** | `10` Classes (`0`–`9`) | Temperature-Scaled Softmax | Class probability distribution & logit telemetry |
+
+---
+
+## Claude version: Neural Digit Reader
+
+- Draw with a mouse, finger or stylus. **Clear** (Esc), **Undo** (Ctrl+Z) and **Example**, which animates a sample digit so you can watch the guess change mid-stroke.
+- Every neuron is drawn: filled dots are firing, hollow ones are silent, and orange or blue lines show which connections push the selected digit's score up or down.
+- Tap any digit or neuron to inspect it. One map shows how much each inked pixel raised or lowered the score; these add up exactly to the score, because a ReLU network is linear while its on/off pattern is fixed. The other shows where a dab of extra ink would help or hurt.
+- Strokes become the 28×28 input the way MNIST was prepared (20×20 box, centred by mass), with pen thickness normalised so drawing size doesn't matter. The browser code is a line-for-line port of the training pipeline, and its inputs are bit-identical to Python's.
+- Training code, weights and steps to reproduce: [`claude/training/`](claude/training/).
 
 ---
 
