@@ -97,8 +97,21 @@ def main(weights_path, out_dir):
             "T": T, "R": R0, "S": S, "TX": TX, "TY": TY,
             "scale1": round(scale1, 4), "scale2": round(scale2, 4), "firstExample": FIRST_EXAMPLE}
 
+    # Neuron roles measured by neuron_roles.py on these exact (re-ordered) weights
+    import hashlib
+    roles = None
+    roles_path = os.path.join(out_dir, "roles.json")
+    if os.path.exists(roles_path):
+        roles = json.load(open(roles_path))
+        if roles.get("w1hash") != hashlib.sha1(P["W1"].astype("<f4").tobytes()).hexdigest()[:16]:
+            print("WARNING: roles.json was measured on different weights; run neuron_roles.py, then build again")
+            roles = None
+    else:
+        print("note: no roles.json yet; run neuron_roles.py on out/final_weights.npz, then build again for tooltips")
+
     page = open(os.path.join(HERE, "page_template.html")).read()
     fills = {
+        "__ROLES__": json.dumps(roles, separators=(",", ":")) if roles else "null",
         "__META__": json.dumps(meta),
         "__EXAMPLES__": json.dumps([{"label": e["label"], "strokes": e["strokes"]} for e in examples],
                                    separators=(",", ":")),

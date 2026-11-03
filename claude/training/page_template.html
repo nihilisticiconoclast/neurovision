@@ -214,12 +214,47 @@ h2 {
 .insp-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .insp-title h3 { margin: 0; font: 700 19px/1.2 var(--font-display); font-stretch: 112%; }
 .badge { font: 600 10.5px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 6px; border-radius: 3px; border: 1px solid var(--rule); color: var(--muted); }
-.insp-body { display: grid; grid-template-columns: repeat(2, minmax(0, 176px)) minmax(0, 1fr); gap: 16px 22px; align-items: start; }
-@media (max-width: 620px) {
-  .insp-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .insp-text { grid-column: 1 / -1; }
+.insp-eyebrow { width: 100%; font: 600 11px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.insp-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 26px; align-items: start; }
+.insp-figs { display: flex; gap: 14px; min-width: 0; }
+.insp-figs figure { width: 152px; }
+@media (max-width: 900px) { .insp-body { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 620px) { .insp-figs figure { width: auto; flex: 1 1 0; } }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; align-content: start; }
+.role { display: grid; gap: 8px; max-width: 64ch; padding: 10px 12px; border-radius: 4px; background: var(--paper); border: 1px solid var(--rule); }
+.role p { margin: 0; font-size: 14px; }
+.role .role-foot { font-size: 12.5px; color: var(--muted); }
+.role .dchart { max-width: 260px; }
+
+/* Neuron tooltip (mouse hover) */
+.tip {
+  position: absolute; z-index: 5;
+  width: 268px; max-width: calc(100% - 8px);
+  display: grid; gap: 8px;
+  padding: 10px 12px 11px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  box-shadow: 0 10px 28px rgba(8, 14, 22, 0.18);
+  pointer-events: none;
 }
-figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+.tip-head { display: flex; justify-content: space-between; gap: 10px; font: 600 10.5px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.tip-now { color: var(--ink); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0.02em; }
+.tip-now.off { color: var(--muted); }
+.tip-label { margin: 0; font: 700 16.5px/1.2 var(--font-display); font-stretch: 112%; text-wrap: balance; }
+.tip-text { margin: 0; font-size: 12.5px; line-height: 1.45; }
+.tip-vis { display: flex; gap: 12px; align-items: flex-end; }
+.tip-vis .sta { width: 62px; height: 62px; }
+.tip-foot { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+.sta { display: block; image-rendering: crisp-edges; image-rendering: pixelated; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); }
+.dchart { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.dbars, .dnums { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; }
+.dbars { height: 40px; align-items: end; }
+.dbars span { display: block; min-height: 2px; border-radius: 1px 1px 0 0; background: var(--muted); opacity: 0.35; }
+.dbars span.hi { background: var(--ink); opacity: 1; }
+.dnums span { font: 500 10px/1 var(--font-mono); text-align: center; color: var(--muted); }
+.dnums span.hi { color: var(--ink); font-weight: 600; }
+.dcap { font: 500 10.5px/1.3 var(--font-mono); color: var(--muted); }
 .map {
   display: block; width: 100%; max-width: 176px; aspect-ratio: 1 / 1; height: auto;
   image-rendering: crisp-edges; image-rendering: pixelated;
@@ -309,7 +344,17 @@ code { font: 500 12.5px var(--font-mono); background: var(--grid); padding: 1px 
         </div>
       </div>
       <div class="net-wrap" id="net-wrap">
-        <canvas id="net" tabindex="-1" role="img" aria-label="Diagram of the network's neurons and the connections carrying the most evidence."></canvas>
+        <canvas id="net" tabindex="-1" role="img" aria-label="Diagram of the network's neurons and the connections carrying the most evidence. Hover over a neuron to see what it responds to."></canvas>
+        <div class="tip" id="tip" role="tooltip" hidden>
+          <div class="tip-head"><span id="tip-id"></span><span class="tip-now" id="tip-now"></span></div>
+          <p class="tip-label" id="tip-label"></p>
+          <p class="tip-text" id="tip-text"></p>
+          <div class="tip-vis" id="tip-vis">
+            <figure><canvas class="sta" id="tip-sta" width="28" height="28"></canvas><figcaption class="dcap">typical trigger</figcaption></figure>
+            <div class="dchart" id="tip-chart"></div>
+          </div>
+          <p class="tip-foot" id="tip-foot"></p>
+        </div>
       </div>
       <p class="caption" id="net-caption"></p>
     </section>
@@ -319,12 +364,20 @@ code { font: 500 12.5px var(--font-mono); background: var(--grid); padding: 1px 
         <h2 id="insp-h">Neuron inspector</h2>
         <button type="button" class="btn small" id="follow" hidden>Back to the guess</button>
       </div>
-      <div class="insp-title"><h3 id="insp-name">Nothing to inspect yet</h3><span class="badge" id="insp-badge" hidden>the guess</span></div>
+      <div class="insp-title"><span class="insp-eyebrow" id="insp-eyebrow"></span><h3 id="insp-name">Nothing to inspect yet</h3><span class="badge" id="insp-badge" hidden>the guess</span></div>
       <div class="insp-body">
-        <figure><canvas class="map" id="map-looks" width="28" height="28"></canvas><figcaption>Where more ink would help or hurt</figcaption></figure>
-        <figure><canvas class="map" id="map-found" width="28" height="28"></canvas><figcaption>What it found in your drawing</figcaption></figure>
+        <div class="insp-figs">
+          <figure id="fig-sta" hidden><canvas class="map" id="map-sta" width="28" height="28"></canvas><figcaption>Typical trigger: the average digit that makes it fire</figcaption></figure>
+          <figure><canvas class="map" id="map-looks" width="28" height="28"></canvas><figcaption>Where more ink would help or hurt</figcaption></figure>
+          <figure><canvas class="map" id="map-found" width="28" height="28"></canvas><figcaption>What it found in your drawing</figcaption></figure>
+        </div>
         <div class="insp-text">
           <div class="stats" id="insp-stats"></div>
+          <div class="role" id="insp-role" hidden>
+            <p id="insp-role-text"></p>
+            <div class="dchart" id="insp-role-chart"></div>
+            <p class="role-foot" id="insp-role-foot"></p>
+          </div>
           <p id="insp-explain">Draw a digit, then tap any neuron in the diagram or any digit in the answer to see what it responds to.</p>
           <div id="insp-chips"></div>
         </div>
@@ -362,6 +415,24 @@ for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 let off = 0;
 const take = (n) => { const a = new Float32Array(bytes.buffer, off, n); off += 4 * n; return a; };
 const W1 = take(N1 * N0), B1 = take(N1), W2 = take(N2 * N1), B2 = take(N2), W3 = take(N3 * N2), B3 = take(N3);
+
+/* ---------- What each hidden neuron responds to ----------
+   Measured offline (neuron_roles.py): 20,000 test digits were scored on shape features
+   (loops, straight strokes, bars, stroke ends, open sides...) and each neuron was labelled
+   by the features its activation tracks, then reviewed by eye. "img" packs each neuron's
+   typical trigger (its activation-weighted average input) at 4 bits per pixel. */
+const ROLES = __ROLES__;
+const ROLE_IMG = ROLES ? Uint8Array.from(atob(ROLES.img), (c) => c.charCodeAt(0)) : null;
+const roleOf = (t) => (!ROLES || !t || t.kind === "out") ? null : (t.kind === "h1" ? ROLES.h1[t.idx] : ROLES.h2[t.idx]);
+function staOf(t) {
+  const base = (t.kind === "h1" ? t.idx : N1 + t.idx) * 392;
+  const out = new Float32Array(784);
+  for (let p = 0; p < 784; p++) {
+    const b = ROLE_IMG[base + (p >> 1)];
+    out[p] = ((p & 1) ? (b & 15) : (b >> 4)) / 15;
+  }
+  return out;
+}
 
 /* ---------- Strokes -> 28x28 input. Line-for-line port of strokes.py (render, normalize). ---------- */
 function render(segs, n, R, S) {
@@ -852,10 +923,6 @@ function colLabel(text, sub, x) {
   ctx.fillText(sub, cx, 28);
 }
 
-function neuronName(t) {
-  return t.kind === "out" ? `Digit ${t.idx}` : `${t.kind === "h1" ? "L1" : "L2"} #${t.idx + 1}`;
-}
-
 function drawNet() {
   if (!L.w) return;
   const ctx = netCtx, net = state.net, ex = state.expl, tgt = currentTarget();
@@ -968,28 +1035,55 @@ function drawNet() {
     else if (state.hover && state.hover.kind === "out" && state.hover.idx === k) ring(x, y, L.r3 + 3.5, false);
   }
 
-  // Hover label (mouse only)
-  if (state.hover && net) {
-    const t = state.hover;
-    const pos = t.kind === "h1" ? L.h1[t.idx] : t.kind === "h2" ? L.h2[t.idx] : L.out[t.idx];
-    const val = t.kind === "h1" ? net.a1[t.idx] : t.kind === "h2" ? net.a2[t.idx] : net.p[t.idx];
-    const text = t.kind === "out" ? `${neuronName(t)} · ${fmtPct(val)}` : `${neuronName(t)} · ${val > 0 ? val.toFixed(2) : "silent"}`;
-    ctx.font = "500 11.5px " + MONO;
-    const tw = ctx.measureText(text).width + 14;
-    let bx = pos[0] + 12;
-    if (bx + tw > L.w - 2) bx = pos[0] - 12 - tw;
-    const by = Math.min(L.h - 26, Math.max(2, pos[1] - 12));
-    ctx.fillStyle = rgba(C.panel, 0.96);
-    ctx.strokeStyle = rgba(C.rule, 1);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.rect(bx + 0.5, by + 0.5, tw, 23);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = rgba(C.ink, 1);
-    ctx.textAlign = "left";
-    ctx.fillText(text, bx + 7.5, by + 16);
+}
+
+/* ---------- Neuron tooltip (mouse hover) ---------- */
+const tip = $("#tip");
+const nodePos = (t) => (t.kind === "h1" ? L.h1 : t.kind === "h2" ? L.h2 : L.out)[t.idx];
+const nodeR = (t) => (t.kind === "h1" ? L.r1 : t.kind === "h2" ? L.r2 : L.r3);
+function drawSta(cv, t) {
+  const ctx = cv.getContext("2d"), id = ctx.createImageData(28, 28), v = staOf(t);
+  for (let p = 0; p < 784; p++) {
+    const c = mix(C.panel, C.ink, Math.pow(v[p], 1.25));
+    id.data[4 * p] = c[0]; id.data[4 * p + 1] = c[1]; id.data[4 * p + 2] = c[2]; id.data[4 * p + 3] = 255;
   }
+  ctx.putImageData(id, 0, 0);
+}
+function digitChart(el, r) {
+  const hi = new Set(r.top);
+  el.innerHTML =
+    `<div class="dbars">${r.pref.map((v, k) => `<span class="${hi.has(k) ? "hi" : ""}" style="height:${Math.max(4, Math.round(v * 100))}%"></span>`).join("")}</div>` +
+    `<div class="dnums">${r.pref.map((_, k) => `<span class="${hi.has(k) ? "hi" : ""}">${k}</span>`).join("")}</div>` +
+    `<span class="dcap">which digits fire it</span>`;
+}
+function showTip(t) {
+  if (!t || !L.w) { tip.hidden = true; return; }
+  const net = state.net, r = roleOf(t), now = $("#tip-now");
+  if (t.kind === "out") {
+    $("#tip-id").textContent = "Output neuron";
+    $("#tip-label").textContent = `Digit ${t.idx}`;
+    $("#tip-text").textContent = net
+      ? `Score ${net.z3[t.idx].toFixed(2)}. Softmax turns the ten scores into probabilities. Click to see the evidence for ${t.idx}.`
+      : `Its score becomes the probability for ${t.idx} once you draw.`;
+    now.textContent = net ? fmtPct(net.p[t.idx]) : "";
+    now.classList.remove("off");
+  } else {
+    const a = net ? (t.kind === "h1" ? net.a1[t.idx] : net.a2[t.idx]) : null;
+    $("#tip-id").textContent = `Layer ${t.kind === "h1" ? 1 : 2} · neuron ${t.idx + 1}`;
+    now.textContent = a === null ? "" : a > 0 ? `firing ${a.toFixed(2)}` : "silent now";
+    now.classList.toggle("off", !(a > 0));
+    $("#tip-label").textContent = r ? r.label : "";
+    $("#tip-text").textContent = r ? r.text : "";
+    if (r) { drawSta($("#tip-sta"), t); digitChart($("#tip-chart"), r); $("#tip-foot").textContent = r.foot; }
+  }
+  $("#tip-vis").hidden = !r;
+  $("#tip-foot").hidden = !r;
+  tip.hidden = false;
+  const [x, y] = nodePos(t), rad = nodeR(t), w = tip.offsetWidth, h = tip.offsetHeight;
+  let left = x + rad + 14;
+  if (left + w > L.w) left = x - rad - 14 - w;
+  tip.style.left = Math.max(0, Math.min(L.w - w, left)) + "px";
+  tip.style.top = Math.max(0, Math.min(L.h - h, y - h / 2)) + "px";
 }
 
 function hitNet(x, y) {
@@ -1011,9 +1105,10 @@ netCv.addEventListener("pointermove", (e) => {
     state.hover = hit;
     netCv.style.cursor = hit ? "pointer" : "default";
     drawNet();
+    showTip(hit);
   }
 });
-netCv.addEventListener("pointerleave", () => { if (state.hover) { state.hover = null; drawNet(); } });
+netCv.addEventListener("pointerleave", () => { if (state.hover) { state.hover = null; drawNet(); } showTip(null); });
 netCv.addEventListener("click", (e) => {
   const r = netCv.getBoundingClientRect();
   const hit = hitNet(e.clientX - r.left, e.clientY - r.top);
@@ -1156,7 +1251,18 @@ function renderInspector() {
   const net = state.net, t = currentTarget(), ex = state.expl;
   $("#follow").hidden = !(state.target && net);
   const name = $("#insp-name"), badge = $("#insp-badge"), stats = $("#insp-stats"), expl = $("#insp-explain"), chips = $("#insp-chips");
+  const eyebrow = $("#insp-eyebrow"), figSta = $("#fig-sta"), roleBox = $("#insp-role");
+  const r = roleOf(t);
+  figSta.hidden = !(net && r);
+  roleBox.hidden = !(net && r);
+  if (net && r) {
+    drawSta($("#map-sta"), t);
+    $("#insp-role-text").textContent = r.text;
+    digitChart($("#insp-role-chart"), r);
+    $("#insp-role-foot").textContent = r.foot;
+  }
   if (!net || !t || !ex) {
+    eyebrow.textContent = "";
     name.textContent = "Nothing to inspect yet";
     badge.hidden = true;
     stats.innerHTML = "";
@@ -1169,9 +1275,11 @@ function renderInspector() {
   const looks = dabMap(ex.gx);
   drawMap(mapLooks, looks, robustMax(looks, 0.99), null);
   drawMap(mapFound, ex.found, maxAbs(ex.found), net.x);
-  const L2name = (j) => `L2 #${j + 1}`, L1name = (i) => `L1 #${i + 1}`;
+  const labelled = (kind, i) => `${kind === "h1" ? "L1" : "L2"} #${i + 1}` + (ROLES ? ` · ${(kind === "h1" ? ROLES.h1 : ROLES.h2)[i].label}` : "");
+  const L2name = (j) => labelled("h2", j), L1name = (i) => labelled("h1", i);
   if (t.kind === "out") {
     const k = t.idx, z = net.z3[k];
+    eyebrow.textContent = `Output · digit ${k}`;
     name.textContent = `Evidence for ${k}`;
     badge.hidden = k !== net.pred;
     stats.innerHTML = `<span><em>score</em> ${z.toFixed(2)}</span><span><em>probability</em> ${fmtPct(net.p[k])}</span><span><em>from pixels</em> ${signed(ex.foundSum)}</span><span><em>fixed offset</em> ${signed(z - ex.foundSum)}</span>`;
@@ -1181,7 +1289,8 @@ function renderInspector() {
     chips.innerHTML = chipGroup(`Layer-2 neurons with the biggest say on ${k}`, topContrib(contrib, N2, "h2", (j, v) => `${L2name(j)} ${signed(v)}`, 3, 2));
   } else if (t.kind === "h2") {
     const j = t.idx, on = net.z2[j] > 0;
-    name.textContent = `Layer 2 · neuron ${j + 1} of ${N2}`;
+    eyebrow.textContent = `Layer 2 · neuron ${j + 1} of ${N2}`;
+    name.textContent = r ? r.label : `Layer 2 · neuron ${j + 1}`;
     badge.hidden = true;
     stats.innerHTML = on ? `<span><em>activation</em> ${net.a2[j].toFixed(2)}</span>` : `<span><em>silent</em> total ${signed(net.z2[j])} is below zero</span>`;
     expl.textContent = `It weighs up the ${N1} layer-1 neurons and fires when the total is above zero. Traced back to pixels, it currently wants ink on the orange areas and none on the blue.`;
@@ -1191,7 +1300,8 @@ function renderInspector() {
       (on ? chipGroup("Its votes", topContrib(votes, N3, "out", (k, v) => `→ ${k} ${signed(v)}`, 2, 2)) : "");
   } else {
     const i = t.idx, on = net.z1[i] > 0;
-    name.textContent = `Layer 1 · neuron ${i + 1} of ${N1}`;
+    eyebrow.textContent = `Layer 1 · neuron ${i + 1} of ${N1}`;
+    name.textContent = r ? r.label : `Layer 1 · neuron ${i + 1}`;
     badge.hidden = true;
     stats.innerHTML = on ? `<span><em>activation</em> ${net.a1[i].toFixed(2)}</span>` : `<span><em>silent</em> total ${signed(net.z1[i])} is below zero</span>`;
     expl.textContent = "It has one weight per pixel. Orange weights reward ink and blue weights penalise it; the neuron fires when the reward wins.";
@@ -1225,6 +1335,7 @@ function update() {
   renderAnswer();
   renderInspector();
   renderCaption();
+  if (state.hover) showTip(state.hover);
   $("#undo").disabled = !state.strokes.length;
   $("#clear").disabled = !state.strokes.length;
 }
@@ -1236,7 +1347,7 @@ layoutNet();
 showExample(false, EXAMPLES.find((e) => e.label === META.firstExample) || EXAMPLES[0]);
 update();
 new ResizeObserver(() => { sizePad(); drawPad(); }).observe($("#pad-wrap"));
-new ResizeObserver(() => { layoutNet(); drawNet(); }).observe($("#net-wrap"));
+new ResizeObserver(() => { layoutNet(); drawNet(); if (state.hover) showTip(state.hover); }).observe($("#net-wrap"));
 const refreshTheme = () => { readTheme(); update(); };
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshTheme);
 new MutationObserver(refreshTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

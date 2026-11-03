@@ -19,7 +19,7 @@ This repo holds two takes on the same brief: Google Gemini's original NeuroVisio
 | Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page |
 | MNIST test set (10,000 digits) | 43.5% | 98.6% |
 | 400 MNIST test digits drawn as pen strokes, through each app's own drawing pipeline | 44.2% | 98.0% |
-| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Exact per-pixel evidence maps, evidence flow through the network, neuron inspector, animated examples |
+| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples |
 
 Both networks were scored on identical images. Gemini's weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, its weights can differ slightly between browsers.
 
@@ -92,6 +92,7 @@ Then visit `http://localhost:8080` in your browser.
 
 - Draw with a mouse, finger or stylus. **Clear** (Esc), **Undo** (Ctrl+Z) and **Example**, which animates a sample digit so you can watch the guess change mid-stroke.
 - Every neuron is drawn: filled dots are firing, hollow ones are silent, and orange or blue lines show which connections push the selected digit's score up or down.
+- Hover over any neuron to see what it responds to, such as "Loop at the top" or "Bar across the top", with the digits that fire it and its typical trigger. The roles are measured, not assigned: 20,000 test digits were scored on shape features and each neuron was labelled by what its activation tracks, then checked by eye. On touch screens, tap the neuron and the inspector shows the same.
 - Tap any digit or neuron to inspect it. One map shows how much each inked pixel raised or lowered the score; these add up exactly to the score, because a ReLU network is linear while its on/off pattern is fixed. The other shows where a dab of extra ink would help or hurt.
 - Strokes become the 28×28 input the way MNIST was prepared (20×20 box, centred by mass), with pen thickness normalised so drawing size doesn't matter. The browser code is a line-for-line port of the training pipeline, and its inputs are bit-identical to Python's.
 - Training code, weights and steps to reproduce: [`claude/training/`](claude/training/).

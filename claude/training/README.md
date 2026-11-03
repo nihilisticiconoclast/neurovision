@@ -17,6 +17,7 @@ The network behind `claude/index.html`: a 784 → 64 → 32 → 10 fully connect
 - `styles.py` holds hand-designed digits in other writing styles, used only for evaluation.
 - `train.py` is the network itself: forward pass, backprop, AdamW with a cosine schedule, and temperature scaling for honest probabilities. Each epoch mixes lightly warped MNIST digits with digits re-drawn from their skeletons with random slant, shear, wobble and pen size, and gives 40% of the re-drawn 1s a European flag.
 - `build_page.py` re-orders hidden neurons for a tidier diagram (outputs unchanged), picks the examples, and embeds the float32 weights into `page_template.html`.
+- `neuron_roles.py` works out what each hidden neuron responds to, for the hover tooltips. It scores 20,000 test digits on shape features (closed loops and where they sit, straight strokes and their angle, bars, where strokes end, open sides, an empty middle), rank-correlates every neuron's activation with each feature, and records which digits fire it and its typical trigger (the activation-weighted average input). Labels come from the best-matching feature; 14 were corrected after checking the contact sheets by eye, listed in `OVERRIDES` with the reason. Neurons with no single clean feature are labelled as mixed.
 - `final_weights.npz` holds the trained weights as used in the page: `W1` (64×784), `b1`, `W2` (32×64), `b2`, `W3` (10×32), `b3`, and temperature `T`. Weight matrices are `[out, in]`, so a layer is `relu(x @ W.T + b)`.
 
 ## Reproduce
@@ -26,7 +27,9 @@ pip install numpy scipy scikit-image numba
 # put the four MNIST .gz files (e.g. from github.com/fgnt/mnist) in ./mnist
 python3 prep.py ./mnist prep.npz          # ~40 s
 python3 train.py --out runs/m64x32.npz    # ~5 min on 2 CPU cores
-python3 build_page.py runs/m64x32.npz out/
+python3 build_page.py runs/m64x32.npz out/          # writes out/final_weights.npz
+python3 neuron_roles.py out/final_weights.npz out/  # measures neuron roles (~25 s), writes contact sheets
+python3 build_page.py runs/m64x32.npz out/          # builds again, now with the tooltips
 cp out/index.html ../index.html
 ```
 
