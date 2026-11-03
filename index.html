@@ -297,7 +297,25 @@
 
                     <!-- Interactive HTML5 Network Canvas -->
                     <div class="relative w-full h-[380px] sm:h-[420px] rounded-xl bg-slate-950/90 border border-slate-800/90 overflow-hidden">
-                        <canvas id="networkVisCanvas" class="w-full h-full block"></canvas>
+                        <canvas id="networkVisCanvas" class="w-full h-full block cursor-pointer"></canvas>
+
+                        <!-- Sensibly Sized Neuron Hover Dialog Box -->
+                        <div id="neuronTooltip" class="hidden pointer-events-none absolute z-20 w-64 rounded-xl bg-slate-900/95 backdrop-blur-md border border-cyan-500/40 shadow-2xl p-3 text-xs transition-opacity duration-150">
+                            <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
+                                <div>
+                                    <span id="ntLayerBadge" class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">HIDDEN 2</span>
+                                    <h4 id="ntSymbolTitle" class="font-semibold text-white text-xs mt-1">Closed Upper Loop</h4>
+                                </div>
+                                <canvas id="ntPreviewCanvas" width="42" height="42" class="w-10 h-10 rounded-lg border border-slate-700 bg-slate-950 shrink-0"></canvas>
+                            </div>
+                            <p id="ntSymbolDesc" class="text-[11px] text-slate-300 leading-snug mb-2.5">
+                                Fires when a continuous circular loop is present in the upper half.
+                            </p>
+                            <div class="flex items-center justify-between text-[10px] font-mono bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                                <span class="text-slate-400">ACTIVATION:</span>
+                                <span id="ntActivationVal" class="text-emerald-400 font-semibold">0.84 (84%)</span>
+                            </div>
+                        </div>
 
                         <!-- Layer Labels Bar at Bottom of Canvas -->
                         <div class="pointer-events-none absolute bottom-2 inset-x-4 flex justify-between text-[10px] font-mono text-slate-400 bg-slate-900/80 backdrop-blur-sm px-3 py-1 rounded-lg border border-slate-800/80">
@@ -1055,6 +1073,39 @@
             }
         ];
 
+        // Symbolic descriptions for neurons across layers when hovered in the topology canvas
+        const H1_PRIMITIVE_SYMBOLS = [
+            { title: "Upper Arc Edge", desc: "Detects top-edge curvature common in digits 0, 2, 3, 8, and 9.", pattern: "topArc" },
+            { title: "Upper-Left Stem", desc: "Fires on vertical/slanted strokes in the top-left quadrant (4, 5, 6).", pattern: "upLeft" },
+            { title: "Upper-Right Hook", desc: "Responds to right-side ascending curves in digits 2, 3, 7, and 9.", pattern: "upRight" },
+            { title: "Top Horizontal Bar", desc: "Detects flat horizontal strokes across the crown (5, 7).", pattern: "topBar" },
+            { title: "Central Vertical Spine", desc: "Fires strongly on upright central stems (1, 4, 7).", pattern: "vertSpine" },
+            { title: "Middle Crossbar", desc: "Detects horizontal intersections across the waist (4, 5, 8).", pattern: "midBar" },
+            { title: "Center Waist Pinch", desc: "Responds to central hour-glass crossings and inflections (3, 8).", pattern: "waist" },
+            { title: "NE → SW Diagonal", desc: "Detects diagonal slash trajectories from top-right to bottom-left (2, 7).", pattern: "diag" },
+            { title: "Lower-Left Belly Curve", desc: "Fires on rounded lower-left contours (0, 6, 8).", pattern: "lowLeft" },
+            { title: "Lower-Right Lobe", desc: "Detects semicircular bowls on the bottom right (3, 5, 6, 8).", pattern: "lowRight" },
+            { title: "Bottom Horizontal Base", desc: "Responds to flat baseline strokes at the foot of the digit (1, 2).", pattern: "botBar" },
+            { title: "Center Cavity Inhibitor", desc: "Fires when the very center remains open while edges are active (0).", pattern: "cavity" }
+        ];
+
+        const H2_COMPOSITE_SYMBOLS = [
+            { title: "Closed Upper Loop", desc: "Symbolizes a complete circular loop in the top half (strong in 8, 9, 0).", pattern: "upperLoop" },
+            { title: "Closed Lower Loop", desc: "Symbolizes a closed rounded bowl in the bottom half (strong in 6, 8, 0).", pattern: "lowerLoop" },
+            { title: "Rightward Half-Loop", desc: "Symbolizes an open C-shaped lobe facing left with a right curve (2, 3, 5).", pattern: "halfLoopRight" },
+            { title: "Double-Lobe Waist", desc: "Symbolizes two stacked loops or lobes pinching at the center (3, 8).", pattern: "doubleLobe" },
+            { title: "Long Vertical Stem", desc: "Symbolizes an unbroken upright pillar running top to bottom (1, 4, 9).", pattern: "vertSpine" },
+            { title: "Crossed Stem Junction", desc: "Symbolizes a vertical stem intersected by a horizontal bar (4, 7).", pattern: "crossJunction" },
+            { title: "Top Bar + Diagonal", desc: "Symbolizes a sharp horizontal cap leading into a long diagonal slash (7, 2).", pattern: "capDiag" },
+            { title: "Upper Hook + Flat Base", desc: "Symbolizes a curved top arch sweeping down to a flat bottom base (2).", pattern: "hookBase" },
+            { title: "Left Ascender + Lower Bowl", desc: "Symbolizes a sweeping left curve wrapping into a bottom loop (6, 5).", pattern: "leftSweepBowl" },
+            { title: "Full Oval Contour", desc: "Symbolizes a continuous outer ring enclosing an empty center (0).", pattern: "ovalRing" },
+            { title: "Upper Loop + Right Tail", desc: "Symbolizes a top circular head anchored to a descending right stem (9).", pattern: "loopTail" },
+            { title: "Top Cap + Lower Belly", desc: "Symbolizes an angular upper-left corner paired with a lower-right half-loop (5).", pattern: "capBelly" },
+            { title: "Open Top + Crossbar", desc: "Symbolizes dual upper prongs meeting a mid-level horizontal bridge (4).", pattern: "openFour" },
+            { title: "Slanted Spine Detector", desc: "Symbolizes a narrow, slightly tilted central stroke with minimal width (1, 7).", pattern: "diag" }
+        ];
+
         /********************************************************************
          * 5. APPLICATION STATE & UI INITIALIZATION
          ********************************************************************/
@@ -1067,6 +1118,8 @@
         let lastPt = null;
         let brushSize = 22;
         let pulsePhase = 0;
+        let renderedGraphNodes = [];
+        let hoveredGraphNode = null;
 
         // DOM Elements
         const drawCanvas = document.getElementById('drawCanvas');
@@ -1206,6 +1259,7 @@
                 renderNetworkTopology();
             });
             resizeNetworkCanvas();
+            setupNetworkHoverTooltip();
 
             // Initialize Drawing Canvas background after all dynamic DOM elements exist
             clearDrawingCanvas(false);
@@ -1603,6 +1657,7 @@
             const H = rect.height - 28; // leave space for bottom label bar
 
             networkVisCtx.clearRect(0, 0, rect.width, rect.height);
+            renderedGraphNodes = [];
 
             // Compute peak activations for telemetry & normalization
             let maxA1 = 0.01, maxA2 = 0.01;
@@ -1621,6 +1676,8 @@
             // 1. Build 16 pooled input region nodes (4x4 spatial blocks of the 28x28 grid)
             const inNodes = [];
             const inCount = 16;
+            const rowNames = ["Top", "Upper-Mid", "Lower-Mid", "Bottom"];
+            const colNames = ["Left", "Center-Left", "Center-Right", "Right"];
             for (let i = 0; i < inCount; i++) {
                 const br = Math.floor(i / 4);
                 const bc = i % 4;
@@ -1632,7 +1689,19 @@
                 }
                 const act = Math.min(1, sum / 18);
                 const ny = 24 + (i / (inCount - 1)) * (H - 36);
-                inNodes.push({ x: xInput, y: ny, act, idx: i });
+                const nodeObj = {
+                    layer: 'INPUT PATCH',
+                    x: xInput,
+                    y: ny,
+                    r: 6,
+                    act,
+                    idx: i,
+                    title: `${rowNames[br]} ${colNames[bc]} Sensor`,
+                    desc: `Pooled 7×7 pixel receptor patch (rows ${br * 7}–${br * 7 + 6}, cols ${bc * 7}–${bc * 7 + 6}).`,
+                    pattern: `patch_${br}_${bc}`
+                };
+                inNodes.push(nodeObj);
+                renderedGraphNodes.push(nodeObj);
             }
 
             // 2. Sample 20 representative nodes from Hidden Layer 1 (64)
@@ -1642,7 +1711,20 @@
                 const realIdx = Math.floor((i / h1VisCount) * nn.h1Size);
                 const act = Math.min(1, nn.a1[realIdx] / maxA1);
                 const ny = 20 + (i / (h1VisCount - 1)) * (H - 28);
-                h1Nodes.push({ x: xH1, y: ny, act, realIdx });
+                const sym = H1_PRIMITIVE_SYMBOLS[i % H1_PRIMITIVE_SYMBOLS.length];
+                const nodeObj = {
+                    layer: `HIDDEN 1 (N#${realIdx})`,
+                    x: xH1,
+                    y: ny,
+                    r: 6.5,
+                    act,
+                    realIdx,
+                    title: sym.title,
+                    desc: sym.desc,
+                    pattern: sym.pattern
+                };
+                h1Nodes.push(nodeObj);
+                renderedGraphNodes.push(nodeObj);
             }
 
             // 3. Sample 14 representative nodes from Hidden Layer 2 (32)
@@ -1652,7 +1734,20 @@
                 const realIdx = Math.floor((i / h2VisCount) * nn.h2Size);
                 const act = Math.min(1, nn.a2[realIdx] / maxA2);
                 const ny = 26 + (i / (h2VisCount - 1)) * (H - 40);
-                h2Nodes.push({ x: xH2, y: ny, act, realIdx });
+                const sym = H2_COMPOSITE_SYMBOLS[i % H2_COMPOSITE_SYMBOLS.length];
+                const nodeObj = {
+                    layer: `HIDDEN 2 (N#${realIdx})`,
+                    x: xH2,
+                    y: ny,
+                    r: 7.5,
+                    act,
+                    realIdx,
+                    title: sym.title,
+                    desc: sym.desc,
+                    pattern: sym.pattern
+                };
+                h2Nodes.push(nodeObj);
+                renderedGraphNodes.push(nodeObj);
             }
 
             // 4. All 10 Output Softmax Nodes (0-9)
@@ -1667,7 +1762,21 @@
             for (let d = 0; d < 10; d++) {
                 const act = currentPreproc && currentPreproc.activeCount > 0 ? nn.probs[d] : 0;
                 const ny = 26 + (d / 9) * (H - 40);
-                outNodes.push({ x: xOut, y: ny, act, digit: d, isTop: d === topDigit && act > 0.12 });
+                const isTop = d === topDigit && act > 0.12;
+                const nodeObj = {
+                    layer: `OUTPUT CLASS #${d}`,
+                    x: xOut,
+                    y: ny,
+                    r: isTop ? 12 : 9.5,
+                    act,
+                    digit: d,
+                    isTop,
+                    title: `Digit "${d}" Archetype`,
+                    desc: DIGIT_EXPLANATIONS[d],
+                    pattern: `digit_${d}`
+                };
+                outNodes.push(nodeObj);
+                renderedGraphNodes.push(nodeObj);
             }
 
             const thresh = 1.05 - synapseDensity;
@@ -1799,6 +1908,241 @@
                 networkVisCtx.textBaseline = 'middle';
                 networkVisCtx.fillText(n.digit, n.x, n.y + 0.5);
             }
+
+            // Highlight currently hovered neuron with an outer glowing selection ring
+            if (hoveredGraphNode) {
+                networkVisCtx.save();
+                networkVisCtx.strokeStyle = '#F59E0B';
+                networkVisCtx.lineWidth = 2.2;
+                networkVisCtx.shadowColor = '#F59E0B';
+                networkVisCtx.shadowBlur = 12;
+                networkVisCtx.beginPath();
+                networkVisCtx.arc(hoveredGraphNode.x, hoveredGraphNode.y, hoveredGraphNode.r + 4, 0, Math.PI * 2);
+                networkVisCtx.stroke();
+                networkVisCtx.restore();
+            }
+        }
+
+        // Draws a symbolic 28x28 visual motif inside the neuron hover tooltip's mini-canvas
+        function drawSymbolicNeuronPreview(node) {
+            const pCanvas = document.getElementById('ntPreviewCanvas');
+            const ctx = pCanvas.getContext('2d');
+            const W = pCanvas.width;
+            const H = pCanvas.height;
+
+            ctx.fillStyle = '#050811';
+            ctx.fillRect(0, 0, W, H);
+
+            // Faintly draw the user's current digit in the background for spatial context
+            for (let y = 0; y < 28; y++) {
+                for (let x = 0; x < 28; x++) {
+                    const v = currentTensor[y * 28 + x];
+                    if (v > 0.1) {
+                        ctx.fillStyle = 'rgba(148, 163, 184, 0.22)';
+                        ctx.fillRect((x / 28) * W, (y / 28) * H, 1.6, 1.6);
+                    }
+                }
+            }
+
+            ctx.strokeStyle = '#06B6D4';
+            ctx.lineWidth = 3.2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            const pat = node.pattern || '';
+            if (pat.startsWith('digit_')) {
+                const d = parseInt(pat.split('_')[1], 10);
+                const strokes = DIGIT_STROKE_RECIPES[d];
+                ctx.strokeStyle = '#10B981';
+                for (const s of strokes) {
+                    ctx.beginPath();
+                    s.forEach(([nx, ny], idx) => {
+                        if (idx === 0) ctx.moveTo(nx * W, ny * H);
+                        else ctx.lineTo(nx * W, ny * H);
+                    });
+                    ctx.stroke();
+                }
+                return;
+            }
+
+            if (pat.startsWith('patch_')) {
+                const parts = pat.split('_');
+                const br = parseInt(parts[1], 10);
+                const bc = parseInt(parts[2], 10);
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.45)';
+                ctx.strokeStyle = '#22D3EE';
+                ctx.lineWidth = 1.5;
+                ctx.fillRect((bc / 4) * W, (br / 4) * H, W / 4, H / 4);
+                ctx.strokeRect((bc / 4) * W, (br / 4) * H, W / 4, H / 4);
+                return;
+            }
+
+            // Draw symbolic structural motifs (loops, half-loops, stems, crossbars, diagonals)
+            ctx.beginPath();
+            switch (pat) {
+                case 'upperLoop':
+                    ctx.arc(W * 0.5, H * 0.32, W * 0.22, 0, Math.PI * 2);
+                    break;
+                case 'lowerLoop':
+                    ctx.arc(W * 0.5, H * 0.68, W * 0.23, 0, Math.PI * 2);
+                    break;
+                case 'halfLoopRight':
+                    ctx.arc(W * 0.46, H * 0.5, W * 0.25, -Math.PI * 0.45, Math.PI * 0.45);
+                    break;
+                case 'doubleLobe':
+                    ctx.arc(W * 0.48, H * 0.32, W * 0.17, -Math.PI * 0.5, Math.PI * 0.5);
+                    ctx.moveTo(W * 0.48, H * 0.49);
+                    ctx.arc(W * 0.48, H * 0.68, W * 0.19, -Math.PI * 0.5, Math.PI * 0.5);
+                    break;
+                case 'vertSpine':
+                    ctx.moveTo(W * 0.5, H * 0.15);
+                    ctx.lineTo(W * 0.5, H * 0.85);
+                    break;
+                case 'crossJunction':
+                    ctx.moveTo(W * 0.56, H * 0.15);
+                    ctx.lineTo(W * 0.56, H * 0.85);
+                    ctx.moveTo(W * 0.2, H * 0.56);
+                    ctx.lineTo(W * 0.82, H * 0.56);
+                    break;
+                case 'capDiag':
+                    ctx.moveTo(W * 0.2, H * 0.22);
+                    ctx.lineTo(W * 0.78, H * 0.22);
+                    ctx.lineTo(W * 0.38, H * 0.84);
+                    break;
+                case 'hookBase':
+                    ctx.arc(W * 0.5, H * 0.34, W * 0.2, Math.PI, 0.15);
+                    ctx.lineTo(W * 0.25, H * 0.82);
+                    ctx.lineTo(W * 0.78, H * 0.82);
+                    break;
+                case 'leftSweepBowl':
+                    ctx.moveTo(W * 0.65, H * 0.16);
+                    ctx.quadraticCurveTo(W * 0.2, H * 0.45, W * 0.3, H * 0.75);
+                    ctx.arc(W * 0.5, H * 0.68, W * 0.2, Math.PI * 0.8, Math.PI * 2.2);
+                    break;
+                case 'ovalRing':
+                case 'cavity':
+                    ctx.ellipse(W * 0.5, H * 0.5, W * 0.26, H * 0.34, 0, 0, Math.PI * 2);
+                    break;
+                case 'loopTail':
+                    ctx.arc(W * 0.5, H * 0.34, W * 0.2, 0, Math.PI * 2);
+                    ctx.moveTo(W * 0.7, H * 0.34);
+                    ctx.lineTo(W * 0.55, H * 0.85);
+                    break;
+                case 'capBelly':
+                    ctx.moveTo(W * 0.72, H * 0.2);
+                    ctx.lineTo(W * 0.3, H * 0.2);
+                    ctx.lineTo(W * 0.28, H * 0.48);
+                    ctx.arc(W * 0.5, H * 0.65, W * 0.2, -Math.PI * 0.6, Math.PI * 0.6);
+                    break;
+                case 'openFour':
+                    ctx.moveTo(W * 0.3, H * 0.2);
+                    ctx.lineTo(W * 0.26, H * 0.56);
+                    ctx.lineTo(W * 0.78, H * 0.56);
+                    ctx.moveTo(W * 0.62, H * 0.2);
+                    ctx.lineTo(W * 0.62, H * 0.84);
+                    break;
+                case 'topArc':
+                    ctx.arc(W * 0.5, H * 0.42, W * 0.24, Math.PI * 1.1, Math.PI * 1.9);
+                    break;
+                case 'upLeft':
+                    ctx.moveTo(W * 0.32, H * 0.18);
+                    ctx.lineTo(W * 0.28, H * 0.52);
+                    break;
+                case 'upRight':
+                    ctx.arc(W * 0.48, H * 0.36, W * 0.22, -Math.PI * 0.4, Math.PI * 0.25);
+                    break;
+                case 'topBar':
+                    ctx.moveTo(W * 0.22, H * 0.22);
+                    ctx.lineTo(W * 0.78, H * 0.22);
+                    break;
+                case 'midBar':
+                    ctx.moveTo(W * 0.22, H * 0.52);
+                    ctx.lineTo(W * 0.78, H * 0.52);
+                    break;
+                case 'botBar':
+                    ctx.moveTo(W * 0.22, H * 0.82);
+                    ctx.lineTo(W * 0.78, H * 0.82);
+                    break;
+                case 'waist':
+                    ctx.moveTo(W * 0.28, H * 0.32);
+                    ctx.lineTo(W * 0.72, H * 0.68);
+                    ctx.moveTo(W * 0.72, H * 0.32);
+                    ctx.lineTo(W * 0.28, H * 0.68);
+                    break;
+                case 'lowLeft':
+                    ctx.arc(W * 0.52, H * 0.64, W * 0.22, Math.PI * 0.55, Math.PI * 1.25);
+                    break;
+                case 'lowRight':
+                    ctx.arc(W * 0.48, H * 0.65, W * 0.22, -Math.PI * 0.25, Math.PI * 0.55);
+                    break;
+                default:
+                    ctx.moveTo(W * 0.72, H * 0.2);
+                    ctx.lineTo(W * 0.28, H * 0.8);
+                    break;
+            }
+            ctx.stroke();
+        }
+
+        // Binds mouse hover over the Network Topology Canvas to show the Neuron Dialog Box
+        function setupNetworkHoverTooltip() {
+            const tooltip = document.getElementById('neuronTooltip');
+            const badgeEl = document.getElementById('ntLayerBadge');
+            const titleEl = document.getElementById('ntSymbolTitle');
+            const descEl = document.getElementById('ntSymbolDesc');
+            const actEl = document.getElementById('ntActivationVal');
+
+            networkVisCanvas.addEventListener('mousemove', (e) => {
+                const rect = networkVisCanvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+
+                let closest = null;
+                let minDist = 18; // generous hit radius for comfortable hovering
+                for (const node of renderedGraphNodes) {
+                    const d = Math.hypot(mx - node.x, my - node.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closest = node;
+                    }
+                }
+
+                if (closest) {
+                    hoveredGraphNode = closest;
+                    badgeEl.textContent = closest.layer;
+                    titleEl.textContent = closest.title;
+                    descEl.textContent = closest.desc;
+
+                    const pct = Math.round(closest.act * 100);
+                    actEl.textContent = `${closest.act.toFixed(2)} (${pct}%)`;
+
+                    drawSymbolicNeuronPreview(closest);
+
+                    // Position dialog box sensibly inside the canvas container without overflowing edges
+                    const boxW = 256;
+                    const boxH = 148;
+                    let left = closest.x + 16;
+                    if (left + boxW > rect.width - 8) {
+                        left = closest.x - boxW - 16;
+                    }
+                    let top = closest.y - boxH / 2;
+                    top = Math.max(8, Math.min(rect.height - boxH - 32, top));
+
+                    tooltip.style.left = `${left}px`;
+                    tooltip.style.top = `${top}px`;
+                    tooltip.classList.remove('hidden');
+                    renderNetworkTopology();
+                } else if (hoveredGraphNode !== null) {
+                    hoveredGraphNode = null;
+                    tooltip.classList.add('hidden');
+                    renderNetworkTopology();
+                }
+            });
+
+            networkVisCanvas.addEventListener('mouseleave', () => {
+                hoveredGraphNode = null;
+                tooltip.classList.add('hidden');
+                renderNetworkTopology();
+            });
         }
 
         // Boot Application on Window Load
