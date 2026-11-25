@@ -1,0 +1,1641 @@
+<title>Convolutional Digit Reader</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: the same instrument as the dense Neural Digit Reader, read left to right like the network itself (pad → network → answer), inspector and notes beneath; one column on phones with the answer straight under the pad. Feature maps take the place of neurons. */
+:root {
+  --paper: #edf0f4;     /* page ground: cool drafting paper */
+  --panel: #fbfcfd;     /* instrument cards */
+  --ink: #121a25;       /* text, the pen, filter activity */
+  --muted: #586577;     /* secondary text, silent maps */
+  --rule: #d3dae3;      /* borders and guides */
+  --grid: #e5e9ef;      /* pad graph paper, bar tracks */
+  --for: #dc5a14;       /* evidence that pushes a score up */
+  --against: #1f6bcf;   /* evidence that pushes it down */
+  --font-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0b0f15; --panel: #121821; --ink: #e5ebf2; --muted: #8b99ab;
+    --rule: #263141; --grid: #1a2230; --for: #ff8a42; --against: #519eff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0b0f15; --panel: #121821; --ink: #e5ebf2; --muted: #8b99ab;
+  --rule: #263141; --grid: #1a2230; --for: #ff8a42; --against: #519eff;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 15px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 22px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 32px; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 125%;
+  font-size: clamp(27px, 4.4vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede { margin: 8px 0 0; max-width: 60ch; color: var(--muted); }
+.spec {
+  margin: 0;
+  font: 500 12px/1.6 var(--font-mono);
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.spec b { color: var(--ink); font-weight: 600; }
+
+/* Grid */
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "pad" "answer" "net" "inspect" "how";
+}
+@media (min-width: 760px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "pad answer" "net net" "inspect inspect" "how how";
+  }
+}
+@media (min-width: 1140px) {
+  .grid {
+    grid-template-columns: minmax(300px, 340px) minmax(0, 1fr) minmax(250px, 280px);
+    grid-template-areas: "pad net answer" "inspect inspect inspect" "how how how";
+  }
+}
+.pad-card { grid-area: pad; }
+.answer-card { grid-area: answer; }
+.net-card { grid-area: net; }
+.inspect-card { grid-area: inspect; }
+.how-card { grid-area: how; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 14px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; min-height: 22px; }
+h2 {
+  margin: 0;
+  font: 600 11.5px/1.3 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+
+/* Drawing pad */
+.pad-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: calc(100% / 12) calc(100% / 12);
+  background-position: -1px -1px;
+  touch-action: none;
+}
+#pad { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.pad-empty {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--muted); font-size: 14px; pointer-events: none; text-align: center; padding: 16px;
+}
+.pad-tag {
+  position: absolute; left: 8px; top: 8px; pointer-events: none;
+  font: 500 11px/1 var(--font-mono); letter-spacing: 0.04em;
+  padding: 5px 7px; border-radius: 3px;
+  background: var(--paper); color: var(--muted); border: 1px solid var(--rule);
+}
+.pad-note { margin: 0; font-size: 13px; color: var(--muted); }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  font: 500 14px/1 var(--font-body);
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 4px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.btn.primary:hover:not(:disabled) { opacity: 0.88; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.small { min-height: 30px; padding: 0 10px; font-size: 13px; }
+:is(.btn, .bar-row, .chip, #net):focus-visible { outline: 2px solid var(--against); outline-offset: 2px; }
+
+/* Answer */
+.readout { display: flex; align-items: center; gap: 16px; min-height: 108px; }
+.big {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 125%;
+  font-size: 108px;
+  line-height: 0.86;
+  min-width: 0.78em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.big.idle { color: var(--muted); font-weight: 500; }
+.verdict { min-width: 0; display: grid; gap: 4px; }
+.verdict p { margin: 0; }
+#verdict { font-weight: 600; font-size: 17px; line-height: 1.3; text-wrap: balance; }
+#runner { color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.bar-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.3em minmax(0, 1fr) 4.4em;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 14px/1 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.bar-row:hover { background: var(--grid); }
+.bar-row .track { height: 10px; border-radius: 2px; background: var(--grid); overflow: hidden; }
+.bar-row:hover .track { background: var(--paper); }
+.bar-row .fill { display: block; height: 100%; width: 0; background: var(--muted); opacity: 0.55; transition: width 120ms linear; }
+.bar-row.top .fill { background: var(--ink); opacity: 1; }
+.bar-row .pct { text-align: right; font: 500 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar-row.top .pct { color: var(--ink); }
+.bar-row.sel { box-shadow: inset 3px 0 0 var(--for); }
+.answer-foot { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+/* Network */
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 500 11.5px/1.4 var(--font-mono); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend i { display: inline-block; flex: none; }
+.lg-on i { width: 10px; height: 10px; border-radius: 2px; background: linear-gradient(135deg, var(--ink) 45%, var(--panel) 45%); border: 1px solid var(--ink); }
+.lg-off i { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--muted); }
+.lg-for i { width: 18px; height: 3px; border-radius: 2px; background: var(--for); }
+.lg-against i { width: 18px; height: 3px; border-radius: 2px; background: var(--against); }
+.net-wrap { position: relative; width: 100%; min-width: 0; }
+#net { display: block; width: 100%; height: 340px; }
+.caption { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 72ch; }
+
+/* Inspector */
+.insp-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.insp-title h3 { margin: 0; font: 700 19px/1.2 var(--font-display); font-stretch: 112%; }
+.badge { font: 600 10.5px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 6px; border-radius: 3px; border: 1px solid var(--rule); color: var(--muted); }
+.insp-eyebrow { width: 100%; font: 600 11px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.insp-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 26px; align-items: start; }
+.insp-figs { display: flex; gap: 14px; min-width: 0; }
+.insp-figs figure { width: 152px; }
+@media (max-width: 900px) { .insp-body { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 620px) { .insp-figs figure { width: auto; flex: 1 1 0; } }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; align-content: start; }
+.role { display: grid; gap: 8px; max-width: 64ch; padding: 10px 12px; border-radius: 4px; background: var(--paper); border: 1px solid var(--rule); }
+.role p { margin: 0; font-size: 14px; }
+.role .role-foot { font-size: 12.5px; color: var(--muted); }
+.role-vis { display: flex; gap: 12px; align-items: flex-end; max-width: 340px; }
+.role-vis .sta { width: 62px; height: 62px; }
+
+/* Map tooltip (mouse hover) */
+.tip {
+  position: absolute; z-index: 5;
+  width: 268px; max-width: calc(100% - 8px);
+  display: grid; gap: 8px;
+  padding: 10px 12px 11px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  box-shadow: 0 10px 28px rgba(8, 14, 22, 0.18);
+  pointer-events: none;
+}
+.tip-head { display: flex; justify-content: space-between; gap: 10px; font: 600 10.5px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.tip-now { color: var(--ink); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0.02em; }
+.tip-now.off { color: var(--muted); }
+.tip-label { margin: 0; font: 700 16.5px/1.2 var(--font-display); font-stretch: 112%; text-wrap: balance; }
+.tip-text { margin: 0; font-size: 12.5px; line-height: 1.45; }
+.tip-vis { display: flex; gap: 12px; align-items: flex-end; }
+.tip-vis .sta { width: 62px; height: 62px; }
+.tip-foot { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+.sta { display: block; image-rendering: crisp-edges; image-rendering: pixelated; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); }
+.dchart { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.dbars, .dnums { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; }
+.dbars { height: 40px; align-items: end; }
+.dbars span { display: block; min-height: 2px; border-radius: 1px 1px 0 0; background: var(--muted); opacity: 0.35; }
+.dbars span.hi { background: var(--ink); opacity: 1; }
+.dnums span { font: 500 10px/1 var(--font-mono); text-align: center; color: var(--muted); }
+.dnums span.hi { color: var(--ink); font-weight: 600; }
+.dcap { font: 500 10.5px/1.3 var(--font-mono); color: var(--muted); }
+.map {
+  display: block; width: 100%; max-width: 176px; aspect-ratio: 1 / 1; height: auto;
+  image-rendering: crisp-edges; image-rendering: pixelated;
+  border: 1px solid var(--rule); border-radius: 3px; background: var(--panel);
+}
+.kgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px 6px; width: 100%; max-width: 176px; }
+.kcell { display: grid; gap: 3px; justify-items: center; min-width: 0; }
+.kcell canvas {
+  display: block; width: 100%; aspect-ratio: 1 / 1; height: auto;
+  image-rendering: crisp-edges; image-rendering: pixelated;
+  border: 1px solid var(--rule); border-radius: 2px; background: var(--panel);
+}
+.kcell span { font: 500 10px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+figcaption { font: 500 11.5px/1.35 var(--font-mono); color: var(--muted); }
+.insp-text { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.insp-text p { margin: 0; font-size: 14px; max-width: 64ch; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 18px; font: 500 13px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; }
+.stats span { white-space: nowrap; }
+.stats em { font-style: normal; color: var(--muted); }
+#insp-chips { display: grid; gap: 10px; }
+.chip-group { display: grid; gap: 6px; }
+.chip-label { font: 500 11.5px/1.3 var(--font-mono); color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 500 12.5px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  padding: 6px 9px; border-radius: 3px;
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+  text-align: left; line-height: 1.25;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--muted); }
+.chip i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.chip.pos i { background: var(--for); }
+.chip.neg i { background: var(--against); }
+
+/* How it works */
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 12px 40px; grid-template-columns: minmax(0, 1fr); font-size: 14px; }
+@media (min-width: 760px) { .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1140px) { .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.steps li::marker { font: 600 13px var(--font-mono); color: var(--muted); }
+.steps strong { font-weight: 600; }
+code { font: 500 12.5px var(--font-mono); background: var(--grid); padding: 1px 4px; border-radius: 3px; white-space: nowrap; }
+.fine { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 110ch; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) { .bar-row .fill { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Convolutional Digit Reader</h1>
+      <p class="lede">Draw a digit from 0 to 9. A small convolutional network reads it as you draw: its filters hunt for edges, then for curves, corners and gaps, and you can see where each one fires.</p>
+    </div>
+    <p class="spec"><b>2 convolution layers · 8 + 16 filters</b> · __PARAMS__ weights<br>__TEST_ACC__ correct on 10,000 unseen MNIST digits</p>
+  </header>
+
+  <main class="grid">
+    <section class="card pad-card" aria-labelledby="pad-h">
+      <div class="card-head"><h2 id="pad-h">Your drawing</h2></div>
+      <div class="pad-wrap" id="pad-wrap">
+        <canvas id="pad" role="img" aria-label="Drawing pad. Draw one digit with a mouse, finger or stylus."></canvas>
+        <div class="pad-empty" id="pad-empty" hidden>Draw one digit here,<br>any size</div>
+        <div class="pad-tag" id="pad-tag" hidden>Example</div>
+      </div>
+      <div class="controls">
+        <button type="button" class="btn primary" id="clear" title="Clear the pad (Esc)">Clear</button>
+        <button type="button" class="btn" id="undo" title="Undo the last stroke (Ctrl+Z)">Undo</button>
+        <button type="button" class="btn" id="example" title="Watch an example digit being drawn">Example</button>
+      </div>
+      <p class="pad-note" id="pad-note">Mouse, finger or stylus. The answer updates with every stroke.</p>
+    </section>
+
+    <section class="card answer-card" aria-labelledby="ans-h">
+      <div class="card-head"><h2 id="ans-h">The network’s answer</h2></div>
+      <div class="readout">
+        <div class="big idle" id="big" aria-hidden="true">?</div>
+        <div class="verdict">
+          <p id="verdict">Waiting for a digit</p>
+          <p id="runner">Draw anything from 0 to 9 on the pad.</p>
+        </div>
+      </div>
+      <ol class="bars" id="bars" aria-label="Probability for each digit"></ol>
+      <p class="answer-foot">Tap a digit to see the evidence for it.</p>
+      <p class="sr-only" id="announce" aria-live="polite"></p>
+    </section>
+
+    <section class="card net-card" aria-labelledby="net-h">
+      <div class="card-head">
+        <h2 id="net-h">Inside the network</h2>
+        <div class="legend" aria-hidden="true">
+          <span class="lg-on"><i></i>firing</span>
+          <span class="lg-off"><i></i>silent</span>
+          <span class="lg-for"><i></i>pushes up</span>
+          <span class="lg-against"><i></i>pushes down</span>
+        </div>
+      </div>
+      <div class="net-wrap" id="net-wrap">
+        <canvas id="net" tabindex="-1" role="img" aria-label="Diagram of the network's feature maps and the connections carrying the most evidence. Hover over a map to see what its filter responds to."></canvas>
+        <div class="tip" id="tip" role="tooltip" hidden>
+          <div class="tip-head"><span id="tip-id"></span><span class="tip-now" id="tip-now"></span></div>
+          <p class="tip-label" id="tip-label"></p>
+          <p class="tip-text" id="tip-text"></p>
+          <div class="tip-vis" id="tip-vis">
+            <figure><canvas class="sta" id="tip-sta" width="9" height="9"></canvas><figcaption class="dcap">typical trigger</figcaption></figure>
+            <div class="dchart" id="tip-chart"></div>
+          </div>
+          <p class="tip-foot" id="tip-foot"></p>
+        </div>
+      </div>
+      <p class="caption" id="net-caption"></p>
+    </section>
+
+    <section class="card inspect-card" aria-labelledby="insp-h">
+      <div class="card-head">
+        <h2 id="insp-h">Inspector</h2>
+        <button type="button" class="btn small" id="follow" hidden>Back to the guess</button>
+      </div>
+      <div class="insp-title"><span class="insp-eyebrow" id="insp-eyebrow"></span><h3 id="insp-name">Nothing to inspect yet</h3><span class="badge" id="insp-badge" hidden>the guess</span></div>
+      <div class="insp-body">
+        <div class="insp-figs">
+          <figure id="fig-kern" hidden>
+            <canvas class="map" id="kern1" width="5" height="5"></canvas>
+            <div class="kgrid" id="kern2" hidden></div>
+            <figcaption id="kern-cap"></figcaption>
+          </figure>
+          <figure><canvas class="map" id="map-looks" width="28" height="28"></canvas><figcaption id="looks-cap">Where more ink would help or hurt</figcaption></figure>
+          <figure><canvas class="map" id="map-found" width="28" height="28"></canvas><figcaption>What it found in your drawing</figcaption></figure>
+        </div>
+        <div class="insp-text">
+          <div class="stats" id="insp-stats"></div>
+          <div class="role" id="insp-role" hidden>
+            <p id="insp-role-text"></p>
+            <div class="role-vis">
+              <figure><canvas class="sta" id="insp-sta" width="9" height="9"></canvas><figcaption class="dcap">typical trigger</figcaption></figure>
+              <div class="dchart" id="insp-role-chart"></div>
+            </div>
+            <p class="role-foot" id="insp-role-foot"></p>
+          </div>
+          <p id="insp-explain">Draw a digit, then tap any feature map in the diagram or any digit in the answer to see what it responds to.</p>
+          <div id="insp-chips"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card how-card" aria-labelledby="how-h">
+      <h2 id="how-h">How it reads a digit</h2>
+      <ol class="steps">
+        <li><strong>Shrink.</strong> Your strokes are scaled into a 20 × 20 box and centred by their centre of mass on a 28 × 28 grid, the way the MNIST training digits were prepared. That gives 784 numbers from 0 (blank) to 1 (ink).</li>
+        <li><strong>Layer 1: edges.</strong> Eight filters of 5 × 5 weights slide across the grid. At every spot a filter weighs the 25 pixels beneath it, adds a bias and keeps the total only if it is positive: <code>max(0, w·x + b)</code>. Each filter paints a map of where its pattern sits; every 2 × 2 block then keeps its strongest value, shrinking the maps to 14 × 14.</li>
+        <li><strong>Layer 2: shapes.</strong> Sixteen filters slide across all eight maps at once, with 5 × 5 × 8 = 200 weights each, combining edges into curves, corners, stroke ends and even the gaps between strokes. Pooling shrinks these maps to 7 × 7.</li>
+        <li><strong>Output.</strong> That leaves 16 × 7 × 7 = 784 numbers, the same count as the pixels, but each now says “this shape, here” rather than “ink, here”. Every digit’s score weighs all 784, and softmax turns the ten scores into probabilities that add up to 100%.</li>
+      </ol>
+      <p class="fine">Trained from scratch in NumPy on 55,000 MNIST digits, with the same mix as the dense Neural Digit Reader: half of every training pass used digits re-drawn as pen strokes with random slant, wobble and pen size, plus flagged European 1s, so mouse and finger drawings look familiar. __REDRAW_ACC__ correct on the test digits re-drawn that way. Because each filter is reused at every position, the whole network needs __PARAMS_NOTE__. It runs entirely in your browser.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+"use strict";
+const META = __META__;
+const EXAMPLES = __EXAMPLES__;
+const MODEL_B64 = "__MODEL__";
+
+const $ = (s) => document.querySelector(s);
+const MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
+const C1 = META.c1, C2 = META.c2, NO = 10;   // filters in layer 1, filters in layer 2, digits
+const KS = 5, KK = 25;                        // every filter is 5 x 5 per input map
+const F3 = C2 * 49;                           // numbers reaching the output: 16 maps of 7 x 7
+
+/* ---------- Weights: float32, little-endian: K1 b1 K2 b2 W3 b3 ----------
+   K1 [map][dy][dx], K2 [map][layer-1 map][dy][dx], W3 [digit][layer-2 map][row][col]. */
+const bin = atob(MODEL_B64);
+const bytes = new Uint8Array(bin.length);
+for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+let off = 0;
+const take = (n) => { const a = new Float32Array(bytes.buffer, off, n); off += 4 * n; return a; };
+const K1 = take(C1 * KK), B1 = take(C1), K2 = take(C2 * C1 * KK), B2 = take(C2), W3 = take(NO * F3), B3 = take(NO);
+
+/* ---------- What each filter responds to ----------
+   Measured offline (cnn_roles.py): every filter was shown probe shapes drawn with the page's
+   own pen (straight strokes at 12 angles, stroke ends, corners, curves, junctions, loops) and
+   scored on 20,000 test digits; each label comes from its strongest probe and was reviewed by
+   eye. "img" packs each filter's typical trigger (the activation-weighted average patch of
+   input around where it fires) at 4 bits per pixel. */
+const ROLES = __ROLES__;
+const ROLE_IMG = ROLES ? Uint8Array.from(atob(ROLES.img), (c) => c.charCodeAt(0)) : null;
+const roleOf = (t) => (!ROLES || !t || t.kind === "out") ? null : (t.kind === "m1" ? ROLES.m1[t.idx] : ROLES.m2[t.idx]);
+function staOf(t) {
+  const n = t.kind === "m1" ? ROLES.p1 : ROLES.p2;
+  const base = t.kind === "m1" ? t.idx * n * n : C1 * ROLES.p1 * ROLES.p1 + t.idx * n * n;
+  const out = new Float32Array(n * n);
+  for (let q = 0; q < n * n; q++) {
+    const g = base + q, b = ROLE_IMG[g >> 1];
+    out[q] = ((g & 1) ? (b & 15) : (b >> 4)) / 15;
+  }
+  return { n, v: out };
+}
+
+/* ---------- Strokes -> 28x28 input. Line-for-line port of strokes.py (render, normalize). ---------- */
+function render(segs, n, R, S) {
+  const F = 28 * S;
+  const fine = new Float32Array(F * F);
+  const inv = 1.0 / S;
+  const pad = R + inv;
+  for (let k = 0; k < n; k++) {
+    const x0 = segs[4 * k], y0 = segs[4 * k + 1], x1 = segs[4 * k + 2], y1 = segs[4 * k + 3];
+    const u0 = Math.max(0, Math.floor((Math.min(x0, x1) - pad) * S));
+    const u1 = Math.min(F - 1, Math.floor((Math.max(x0, x1) + pad) * S));
+    const v0 = Math.max(0, Math.floor((Math.min(y0, y1) - pad) * S));
+    const v1 = Math.min(F - 1, Math.floor((Math.max(y0, y1) + pad) * S));
+    const dx = x1 - x0, dy = y1 - y0;
+    const L2 = dx * dx + dy * dy;
+    for (let v = v0; v <= v1; v++) {
+      const py = (v + 0.5) * inv;
+      for (let u = u0; u <= u1; u++) {
+        const px = (u + 0.5) * inv;
+        let t = 0.0;
+        if (L2 > 0.0) {
+          t = ((px - x0) * dx + (py - y0) * dy) / L2;
+          if (t < 0.0) t = 0.0; else if (t > 1.0) t = 1.0;
+        }
+        const qx = x0 + t * dx - px, qy = y0 + t * dy - py;
+        const d = Math.sqrt(qx * qx + qy * qy);
+        let c = (R - d) * S + 0.5;
+        if (c > 1.0) c = 1.0;
+        const idx = v * F + u;
+        if (c > fine[idx]) fine[idx] = c;
+      }
+    }
+  }
+  const img = new Float32Array(784);
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      let acc = 0.0;
+      for (let j = 0; j < S; j++) {
+        const row = (y * S + j) * F + x * S;
+        for (let i = 0; i < S; i++) acc += fine[row + i];
+      }
+      img[y * 28 + x] = acc / (S * S);
+    }
+  }
+  return img;
+}
+
+function normalize(raw, n, R, S, tx, ty) {
+  let minx = 1e30, maxx = -1e30, miny = 1e30, maxy = -1e30;
+  for (let k = 0; k < n; k++) {
+    for (let e = 0; e < 2; e++) {
+      const x = raw[4 * k + 2 * e], y = raw[4 * k + 2 * e + 1];
+      if (x < minx) minx = x;
+      if (x > maxx) maxx = x;
+      if (y < miny) miny = y;
+      if (y > maxy) maxy = y;
+    }
+  }
+  const L = Math.max(maxx - minx, maxy - miny);
+  let s = 0.0;
+  if (L > 1e-9) s = (20.0 - 2.0 * R) / L;
+  const cx = (minx + maxx) * 0.5, cy = (miny + maxy) * 0.5;
+  const segs = new Float64Array(4 * n);
+  for (let k = 0; k < n; k++) {
+    segs[4 * k] = (raw[4 * k] - cx) * s + 14.0;
+    segs[4 * k + 1] = (raw[4 * k + 1] - cy) * s + 14.0;
+    segs[4 * k + 2] = (raw[4 * k + 2] - cx) * s + 14.0;
+    segs[4 * k + 3] = (raw[4 * k + 3] - cy) * s + 14.0;
+  }
+  let img = render(segs, n, R, S);
+  let tot = 0.0, mx = 0.0, my = 0.0;
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      const val = img[y * 28 + x];
+      tot += val;
+      mx += val * (x + 0.5);
+      my += val * (y + 0.5);
+    }
+  }
+  if (tot > 0.0) {
+    const ox = tx - mx / tot, oy = ty - my / tot;
+    for (let k = 0; k < n; k++) {
+      segs[4 * k] += ox; segs[4 * k + 2] += ox;
+      segs[4 * k + 1] += oy; segs[4 * k + 3] += oy;
+    }
+    img = render(segs, n, R, S);
+  }
+  return img;
+}
+
+function strokesToRaw(strokes) {
+  let n = 0;
+  for (const s of strokes) if (s.length) n += s.length > 1 ? s.length - 1 : 1;
+  const raw = new Float64Array(4 * n);
+  let k = 0;
+  for (const s of strokes) {
+    if (!s.length) continue;
+    if (s.length === 1) {
+      raw[4 * k] = s[0][0]; raw[4 * k + 1] = s[0][1]; raw[4 * k + 2] = s[0][0]; raw[4 * k + 3] = s[0][1]; k++;
+    } else {
+      for (let i = 0; i + 1 < s.length; i++) {
+        raw[4 * k] = s[i][0]; raw[4 * k + 1] = s[i][1]; raw[4 * k + 2] = s[i + 1][0]; raw[4 * k + 3] = s[i + 1][1]; k++;
+      }
+    }
+  }
+  return { raw, n };
+}
+
+function toInput(strokes) {
+  const { raw, n } = strokesToRaw(strokes);
+  return normalize(raw, n, META.R, META.S, META.TX, META.TY);
+}
+
+/* ---------- Forward pass ----------
+   Maps are channel-major: map c, row y, column x lives at [c * N * N + y * N + x].
+   Convolutions are 'same': zero padding of 2 keeps each map the size of its input. */
+function pool(a, C, N) {
+  // 2x2 max pool; ties go to the first maximum in reading order, as in cnn_train.py
+  const n = N >> 1, p = new Float64Array(C * n * n), win = new Uint8Array(C * n * n);
+  for (let c = 0; c < C; c++) {
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const o = c * N * N + 2 * y * N + 2 * x;
+        let best = a[o], bi = 0;
+        if (a[o + 1] > best) { best = a[o + 1]; bi = 1; }
+        if (a[o + N] > best) { best = a[o + N]; bi = 2; }
+        if (a[o + N + 1] > best) { best = a[o + N + 1]; bi = 3; }
+        const q = c * n * n + y * n + x;
+        p[q] = best; win[q] = bi;
+      }
+    }
+  }
+  return [p, win];
+}
+
+function forward(x) {
+  const z1 = new Float64Array(C1 * 784), a1 = new Float64Array(C1 * 784);
+  for (let c = 0; c < C1; c++) {
+    const kb = c * KK;
+    for (let y = 0; y < 28; y++) {
+      for (let xx = 0; xx < 28; xx++) {
+        let s = B1[c];
+        for (let dy = 0; dy < KS; dy++) {
+          const yy = y + dy - 2;
+          if (yy < 0 || yy > 27) continue;
+          for (let dx = 0; dx < KS; dx++) {
+            const xs = xx + dx - 2;
+            if (xs < 0 || xs > 27) continue;
+            s += K1[kb + dy * KS + dx] * x[yy * 28 + xs];
+          }
+        }
+        const q = c * 784 + y * 28 + xx;
+        z1[q] = s; a1[q] = s > 0 ? s : 0;
+      }
+    }
+  }
+  const [p1, w1] = pool(a1, C1, 28);
+  const z2 = new Float64Array(C2 * 196), a2 = new Float64Array(C2 * 196);
+  for (let j = 0; j < C2; j++) {
+    for (let y = 0; y < 14; y++) {
+      for (let xx = 0; xx < 14; xx++) {
+        let s = B2[j];
+        for (let i = 0; i < C1; i++) {
+          const kb = (j * C1 + i) * KK, ib = i * 196;
+          for (let dy = 0; dy < KS; dy++) {
+            const yy = y + dy - 2;
+            if (yy < 0 || yy > 13) continue;
+            for (let dx = 0; dx < KS; dx++) {
+              const xs = xx + dx - 2;
+              if (xs < 0 || xs > 13) continue;
+              s += K2[kb + dy * KS + dx] * p1[ib + yy * 14 + xs];
+            }
+          }
+        }
+        const q = j * 196 + y * 14 + xx;
+        z2[q] = s; a2[q] = s > 0 ? s : 0;
+      }
+    }
+  }
+  const [p2, w2] = pool(a2, C2, 14);
+  const z3 = new Float64Array(NO);
+  for (let k = 0; k < NO; k++) {
+    let s = B3[k];
+    const o = k * F3;
+    for (let f = 0; f < F3; f++) s += W3[o + f] * p2[f];
+    z3[k] = s;
+  }
+  let m = -Infinity;
+  for (let k = 0; k < NO; k++) m = Math.max(m, z3[k]);
+  const p = new Float64Array(NO);
+  let tot = 0;
+  for (let k = 0; k < NO; k++) { p[k] = Math.exp((z3[k] - m) / META.T); tot += p[k]; }
+  let pred = 0;
+  for (let k = 0; k < NO; k++) { p[k] /= tot; if (p[k] > p[pred]) pred = k; }
+  return { x, z1, a1, p1, w1, z2, a2, p2, w2, z3, p, pred };
+}
+
+/* ---------- Explanations ----------
+   With its on/off pattern and its pooling winners fixed, a ReLU + max-pool network is exactly
+   linear, so any score (or a map's total) = sum over pixels of (ink x sensitivity) + a constant.
+   "Where more ink would help" is that sensitivity; "found" is ink x sensitivity. Edge values
+   are the matching path contributions, so the picture adds up to the real numbers. */
+function unpoolRelu(g, win, z, C, N) {
+  // Send each pooled gradient to the spot that won its 2x2 block, if that spot was firing.
+  const n = N >> 1, out = new Float64Array(C * N * N);
+  for (let c = 0; c < C; c++) {
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const q = c * n * n + y * n + x;
+        if (g[q] === 0) continue;
+        const b = win[q], o = c * N * N + (2 * y + (b >> 1)) * N + 2 * x + (b & 1);
+        if (z[o] > 0) out[o] = g[q];
+      }
+    }
+  }
+  return out;
+}
+function part2(j, i, p1) {
+  // Layer-1 map i's share of layer-2 map j at every spot (no bias).
+  const out = new Float64Array(196), kb = (j * C1 + i) * KK, ib = i * 196;
+  for (let y = 0; y < 14; y++) {
+    for (let x = 0; x < 14; x++) {
+      let s = 0;
+      for (let dy = 0; dy < KS; dy++) {
+        const yy = y + dy - 2;
+        if (yy < 0 || yy > 13) continue;
+        for (let dx = 0; dx < KS; dx++) {
+          const xs = x + dx - 2;
+          if (xs < 0 || xs > 13) continue;
+          s += K2[kb + dy * KS + dx] * p1[ib + yy * 14 + xs];
+        }
+      }
+      out[y * 14 + x] = s;
+    }
+  }
+  return out;
+}
+function back2(dZ2) {
+  // Gradient on layer-2 pre-activations -> gradient on the pooled layer-1 maps.
+  const dP1 = new Float64Array(C1 * 196);
+  for (let j = 0; j < C2; j++) {
+    for (let y = 0; y < 14; y++) {
+      for (let x = 0; x < 14; x++) {
+        const g = dZ2[j * 196 + y * 14 + x];
+        if (g === 0) continue;
+        for (let i = 0; i < C1; i++) {
+          const kb = (j * C1 + i) * KK, ib = i * 196;
+          for (let dy = 0; dy < KS; dy++) {
+            const yy = y + dy - 2;
+            if (yy < 0 || yy > 13) continue;
+            for (let dx = 0; dx < KS; dx++) {
+              const xs = x + dx - 2;
+              if (xs < 0 || xs > 13) continue;
+              dP1[ib + yy * 14 + xs] += g * K2[kb + dy * KS + dx];
+            }
+          }
+        }
+      }
+    }
+  }
+  return dP1;
+}
+function back1(dZ1) {
+  // Gradient on layer-1 pre-activations -> gradient on the 784 input pixels.
+  const gx = new Float64Array(784);
+  for (let c = 0; c < C1; c++) {
+    const kb = c * KK;
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        const g = dZ1[c * 784 + y * 28 + x];
+        if (g === 0) continue;
+        for (let dy = 0; dy < KS; dy++) {
+          const yy = y + dy - 2;
+          if (yy < 0 || yy > 27) continue;
+          for (let dx = 0; dx < KS; dx++) {
+            const xs = x + dx - 2;
+            if (xs < 0 || xs > 27) continue;
+            gx[yy * 28 + xs] += g * K1[kb + dy * KS + dx];
+          }
+        }
+      }
+    }
+  }
+  return gx;
+}
+function scoreGrad2(net, k) {
+  // d score_k / d layer-2 pre-activations
+  return unpoolRelu(W3.subarray(k * F3, (k + 1) * F3), net.w2, net.z2, C2, 14);
+}
+function votes(net, j, k) {
+  // What layer-2 map j adds to digit k's score: its 7x7 pooled map weighed by W3
+  let s = 0;
+  const o = k * F3 + j * 49;
+  for (let q = 0; q < 49; q++) s += W3[o + q] * net.p2[j * 49 + q];
+  return s;
+}
+
+function explain(net, t) {
+  const { x, z1, p1, w1, z2 } = net;
+  const Ein = new Float64Array(C1), E12 = new Float64Array(C2 * C1), E23 = new Float64Array(NO * C2);
+  let dZ1, total = 0;
+  if (t.kind === "out" || t.kind === "m2") {
+    let dZ2;
+    if (t.kind === "out") {
+      const k = t.idx;
+      dZ2 = scoreGrad2(net, k);
+      for (let j = 0; j < C2; j++) E23[k * C2 + j] = votes(net, j, k);
+      total = net.z3[k];
+    } else {
+      const j = t.idx;
+      dZ2 = new Float64Array(C2 * 196);
+      for (let q = 0; q < 196; q++) if (z2[j * 196 + q] > 0) { dZ2[j * 196 + q] = 1; total += z2[j * 196 + q]; }
+      for (let k = 0; k < NO; k++) E23[k * C2 + j] = votes(net, j, k);
+    }
+    for (let j = 0; j < C2; j++) {
+      let any = false;
+      for (let q = 0; q < 196; q++) if (dZ2[j * 196 + q] !== 0) { any = true; break; }
+      if (!any) continue;
+      for (let i = 0; i < C1; i++) {
+        const part = part2(j, i, p1);
+        let s = 0;
+        for (let q = 0; q < 196; q++) s += dZ2[j * 196 + q] * part[q];
+        E12[j * C1 + i] = s;
+        Ein[i] += s;
+      }
+    }
+    dZ1 = unpoolRelu(back2(dZ2), w1, z1, C1, 28);
+  } else {
+    const i = t.idx;
+    dZ1 = new Float64Array(C1 * 784);
+    for (let q = 0; q < 784; q++) if (z1[i * 784 + q] > 0) { dZ1[i * 784 + q] = 1; total += z1[i * 784 + q]; }
+    Ein[i] = total;
+    const g2 = [];
+    for (let k = 0; k < NO; k++) g2.push(scoreGrad2(net, k));
+    for (let j = 0; j < C2; j++) {
+      const part = part2(j, i, p1);
+      let s = 0;
+      for (let q = 0; q < 196; q++) if (z2[j * 196 + q] > 0) s += part[q];
+      E12[j * C1 + i] = s;
+      for (let k = 0; k < NO; k++) {
+        let v = 0;
+        const g = g2[k];
+        for (let q = 0; q < 196; q++) v += g[j * 196 + q] * part[q];
+        E23[k * C2 + j] = v;
+      }
+    }
+  }
+  const gx = back1(dZ1);
+  const found = new Float64Array(784);
+  let foundSum = 0;
+  for (let p = 0; p < 784; p++) { found[p] = x[p] * gx[p]; foundSum += found[p]; }
+  return { Ein, E12, E23, gx, found, foundSum, total };
+}
+
+/* What a map is doing right now: its strongest spot, its total and how many spots fire. */
+function mapStats(net, t) {
+  const n = t.kind === "m1" ? 784 : 196, z = t.kind === "m1" ? net.z1 : net.z2, o = t.idx * n;
+  let peak = -Infinity, total = 0, firing = 0;
+  for (let q = 0; q < n; q++) {
+    const v = z[o + q];
+    if (v > peak) peak = v;
+    if (v > 0) { total += v; firing++; }
+  }
+  return { peak, total, firing, n };
+}
+
+/* ---------- State ---------- */
+const state = {
+  strokes: [],
+  isExample: false,
+  drawing: null,
+  pointerId: null,
+  net: null,
+  expl: null,
+  target: null,     // null = follow the guess; else {kind: "out"|"m2"|"m1", idx}
+  hover: null,
+  anim: null,
+  exampleOrder: [],
+};
+const currentTarget = () => state.target || (state.net ? { kind: "out", idx: state.net.pred } : null);
+const sameT = (a, b) => (!a && !b) || (a && b && a.kind === b.kind && a.idx === b.idx);
+
+/* ---------- Theme colours (read from the CSS tokens) ---------- */
+const C = {};
+function parseColor(str) {
+  const s = str.trim();
+  if (s[0] === "#") {
+    let h = s.slice(1);
+    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    const n = parseInt(h.slice(0, 6), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = s.match(/[\d.]+/g);
+  return m ? m.slice(0, 3).map(Number) : [128, 128, 128];
+}
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["paper", "panel", "ink", "muted", "rule", "grid", "for", "against"]) C[k] = parseColor(cs.getPropertyValue("--" + k));
+}
+const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+/* ---------- Drawing pad ---------- */
+const pad = $("#pad"), padCtx = pad.getContext("2d");
+let padSize = 1;
+function sizePad() {
+  const r = pad.getBoundingClientRect();
+  if (!r.width) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  padSize = r.width;
+  pad.width = Math.round(r.width * dpr);
+  pad.height = Math.round(r.height * dpr);
+  padCtx.setTransform(pad.width / r.width, 0, 0, pad.height / r.height, 0, 0);
+}
+function drawPad() {
+  padCtx.save();
+  padCtx.setTransform(1, 0, 0, 1, 0, 0);
+  padCtx.clearRect(0, 0, pad.width, pad.height);
+  padCtx.restore();
+  const S = padSize;
+  padCtx.strokeStyle = rgba(C.ink, 1);
+  padCtx.fillStyle = rgba(C.ink, 1);
+  padCtx.lineWidth = Math.max(6, S * 0.048);
+  padCtx.lineCap = "round";
+  padCtx.lineJoin = "round";
+  for (const s of state.strokes) {
+    if (!s.length) continue;
+    if (s.length === 1) {
+      padCtx.beginPath();
+      padCtx.arc(s[0][0] * S, s[0][1] * S, padCtx.lineWidth / 2, 0, Math.PI * 2);
+      padCtx.fill();
+      continue;
+    }
+    padCtx.beginPath();
+    padCtx.moveTo(s[0][0] * S, s[0][1] * S);
+    for (let i = 1; i < s.length; i++) padCtx.lineTo(s[i][0] * S, s[i][1] * S);
+    padCtx.stroke();
+  }
+  $("#pad-empty").hidden = state.strokes.length > 0;
+  $("#pad-tag").hidden = !state.isExample;
+  const note = state.isExample ? "This is an example. Start drawing to replace it, or press Clear." : "Mouse, finger or stylus. The answer updates with every stroke.";
+  const noteEl = $("#pad-note");
+  if (noteEl.textContent !== note) noteEl.textContent = note;
+}
+
+function padPoint(e) {
+  const r = pad.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+  return [x, y];
+}
+pad.addEventListener("pointerdown", (e) => {
+  if (state.pointerId !== null || e.button > 0) return;
+  e.preventDefault();
+  stopAnim();
+  if (state.isExample) { state.strokes = []; state.isExample = false; state.target = null; }
+  state.pointerId = e.pointerId;
+  try { pad.setPointerCapture(e.pointerId); } catch (_) { /* capture is optional */ }
+  state.drawing = [padPoint(e)];
+  state.strokes.push(state.drawing);
+  schedule();
+});
+pad.addEventListener("pointermove", (e) => {
+  if (e.pointerId !== state.pointerId || !state.drawing) return;
+  const list = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+  for (const ev of list) {
+    const p = padPoint(ev);
+    const last = state.drawing[state.drawing.length - 1];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) > 0.0025) state.drawing.push(p);
+  }
+  schedule();
+});
+function endStroke(e) {
+  if (e.pointerId !== state.pointerId) return;
+  state.pointerId = null;
+  state.drawing = null;
+  schedule();
+  announce();
+}
+pad.addEventListener("pointerup", endStroke);
+pad.addEventListener("pointercancel", endStroke);
+
+function clearPad() {
+  stopAnim();
+  state.strokes = [];
+  state.isExample = false;
+  state.target = null;
+  state.pointerId = null;
+  state.drawing = null;
+  schedule();
+  announce("Pad cleared.");
+}
+function undo() {
+  stopAnim();
+  if (!state.strokes.length) return;
+  state.strokes.pop();
+  state.isExample = false;
+  if (!state.strokes.length) state.target = null;
+  schedule();
+  announce();
+}
+$("#clear").addEventListener("click", clearPad);
+$("#undo").addEventListener("click", undo);
+$("#example").addEventListener("click", () => showExample(true));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { clearPad(); }
+  else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+});
+
+/* ---------- Examples ---------- */
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+function exampleStrokes(ex) {
+  return ex.strokes.map((s) => s.map(([x, y]) => [0.15 + 0.7 * x / 100, 0.15 + 0.7 * y / 100]));
+}
+function nextExample() {
+  if (!state.exampleOrder.length) {
+    const idx = EXAMPLES.map((_, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+    state.exampleOrder = idx;
+  }
+  return EXAMPLES[state.exampleOrder.pop()];
+}
+function stopAnim() {
+  if (state.anim) { cancelAnimationFrame(state.anim.raf); state.anim = null; }
+}
+function showExample(animate, ex) {
+  stopAnim();
+  ex = ex || nextExample();
+  const full = exampleStrokes(ex);
+  state.target = null;
+  state.isExample = true;
+  if (!animate || reduceMotion.matches) {
+    state.strokes = full.map((s) => s.slice());
+    schedule();
+    announce();
+    return;
+  }
+  // Draw at a steady pen speed, pausing briefly between strokes.
+  const lens = full.map((s) => s.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - s[i][0], p[1] - s[i][1]), 0));
+  const total = lens.reduce((a, b) => a + b, 0);
+  const speed = total / 1.1;                 // pad widths per second
+  const pause = 0.14;
+  const start = performance.now();
+  state.strokes = [];
+  const tick = (now) => {
+    let t = (now - start) / 1000;
+    const out = [];
+    let done = true;
+    for (let si = 0; si < full.length; si++) {
+      const s = full[si];
+      let budget = t * speed;
+      if (budget <= 0) { done = false; break; }
+      const part = [s[0]];
+      let used = 0;
+      for (let i = 1; i < s.length; i++) {
+        const seg = Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+        if (used + seg <= budget) { part.push(s[i]); used += seg; }
+        else {
+          const f = (budget - used) / seg;
+          part.push([s[i - 1][0] + (s[i][0] - s[i - 1][0]) * f, s[i - 1][1] + (s[i][1] - s[i - 1][1]) * f]);
+          used = budget;
+          break;
+        }
+      }
+      out.push(part);
+      if (used < lens[si] - 1e-9) { done = false; break; }
+      t -= lens[si] / speed + pause;
+    }
+    state.strokes = out;
+    state.isExample = true;
+    update();
+    if (done) { state.anim = null; state.strokes = full.map((s) => s.slice()); update(); announce(); return; }
+    state.anim.raf = requestAnimationFrame(tick);
+  };
+  state.anim = { raf: requestAnimationFrame(tick) };
+}
+
+/* ---------- Network diagram ----------
+   Each layer's maps are tiles in two staggered columns (as the dense page staggers its first
+   layer), so the wires into the far column pass between the tiles of the near one. */
+const netCv = $("#net"), netCtx = netCv.getContext("2d");
+const L = {};
+const inputTile = document.createElement("canvas");
+inputTile.width = 28; inputTile.height = 28;
+const tileCv = { m1: [], m2: [] };
+function tileCanvas(kind, idx) {
+  if (!tileCv[kind][idx]) {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = kind === "m1" ? 28 : 14;
+    tileCv[kind][idx] = cv;
+  }
+  return tileCv[kind][idx];
+}
+function layoutNet() {
+  const w = netCv.parentElement.clientWidth;
+  if (!w) return;
+  const h = Math.round(Math.min(470, Math.max(310, w * 0.66)));
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  netCv.style.height = h + "px";
+  netCv.width = Math.round(w * dpr);
+  netCv.height = Math.round(h * dpr);
+  netCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const top = 44, bottom = 10, side = 2;
+  const avail = h - top - bottom;
+  const sIn = Math.round(Math.max(58, Math.min(w * 0.19, avail * 0.42, 118)));
+  const sp3 = avail / NO;
+  const r3 = Math.max(8.5, Math.min(14, sp3 * 0.37));
+  const xIn0 = side, xIn1 = side + sIn;
+  const xOut = w - side - r3 - 2;
+  const rows1 = Math.ceil(C1 / 2), rows2 = Math.ceil(C2 / 2);
+  const pitch1 = avail / rows1, pitch2 = avail / rows2;
+  const t1 = Math.round(Math.max(20, Math.min(pitch1 * 0.64, w * 0.085, 62)));
+  const t2 = Math.round(Math.max(14, Math.min(pitch2 * 0.72, w * 0.06, 40)));
+  const g1 = Math.round(Math.max(5, t1 * 0.2)), g2 = Math.round(Math.max(4, t2 * 0.22));
+  const block1 = 2 * t1 + g1, block2 = 2 * t2 + g2;
+  const span = Math.max(30, xOut - r3 - xIn1 - block1 - block2);
+  const xB1 = Math.round(xIn1 + span * 0.3), xB2 = Math.round(xB1 + block1 + span * 0.36);
+  const m1 = [], m2 = [], out = [];
+  for (let i = 0; i < C1; i++) {
+    const col = i & 1, row = i >> 1;
+    m1.push({ x: xB1 + col * (t1 + g1), y: Math.round(top + (row + (col ? 0.75 : 0.25)) * pitch1 - t1 / 2), s: t1 });
+  }
+  for (let j = 0; j < C2; j++) {
+    const col = j & 1, row = j >> 1;
+    m2.push({ x: xB2 + col * (t2 + g2), y: Math.round(top + (row + (col ? 0.75 : 0.25)) * pitch2 - t2 / 2), s: t2 });
+  }
+  for (let k = 0; k < NO; k++) out.push([xOut, top + (k + 0.5) * sp3]);
+  Object.assign(L, { w, h, top, avail, sIn, xIn0, xIn1, yIn0: top + (avail - sIn) / 2, r3, xB1, xB2, block1, block2, xOut, m1, m2, out });
+}
+
+function maxAbs(a) { let m = 0; for (let i = 0; i < a.length; i++) { const v = Math.abs(a[i]); if (v > m) m = v; } return m; }
+
+function drawEdges(list, cap) {
+  list.sort((a, b) => Math.abs(a[4]) - Math.abs(b[4]));
+  if (cap && list.length > cap) list = list.slice(list.length - cap);
+  const ctx = netCtx;
+  ctx.lineCap = "round";
+  for (const [x0, y0, x1, y1, t] of list) {
+    const a = Math.abs(t);
+    ctx.strokeStyle = rgba(t > 0 ? C.for : C.against, (0.1 + 0.85 * Math.pow(a, 0.8)).toFixed(3));
+    ctx.lineWidth = 0.6 + 2.3 * a;
+    ctx.beginPath();
+    const mx = (x0 + x1) / 2;
+    ctx.moveTo(x0, y0);
+    ctx.bezierCurveTo(mx, y0, mx, y1, x1, y1);
+    ctx.stroke();
+  }
+}
+
+function colLabel(text, sub, x) {
+  const ctx = netCtx;
+  ctx.font = "600 10.5px " + MONO;
+  const w = Math.max(ctx.measureText(text).width, ctx.measureText(sub).width);
+  const cx = Math.min(L.w - w / 2 - 1, Math.max(w / 2 + 1, x));
+  ctx.textAlign = "center";
+  ctx.fillStyle = rgba(C.muted, 1);
+  ctx.fillText(text, cx, 14);
+  ctx.font = "500 10.5px " + MONO;
+  ctx.fillStyle = rgba(C.ink, 1);
+  ctx.fillText(sub, cx, 28);
+}
+
+const boxOf = (t) => (t.kind === "m1" ? L.m1 : L.m2)[t.idx];
+function drawTile(kind, idx) {
+  const ctx = netCtx, net = state.net, b = (kind === "m1" ? L.m1 : L.m2)[idx], tgt = currentTarget();
+  const n = kind === "m1" ? 28 : 14, nn = n * n, a = net ? (kind === "m1" ? net.a1 : net.a2) : null, o = idx * nn;
+  const scale = (kind === "m1" ? META.scale1 : META.scale2)[idx];
+  let peak = 0;
+  if (a) for (let q = 0; q < nn; q++) if (a[o + q] > peak) peak = a[o + q];
+  ctx.fillStyle = rgba(C.panel, 1);
+  ctx.fillRect(b.x, b.y, b.s, b.s);
+  if (peak > 0) {
+    const cv = tileCanvas(kind, idx), tctx = cv.getContext("2d"), id = tctx.createImageData(n, n);
+    for (let q = 0; q < nn; q++) {
+      const c = mix(C.panel, C.ink, Math.pow(Math.min(1, a[o + q] / scale), 0.8));
+      id.data[4 * q] = c[0]; id.data[4 * q + 1] = c[1]; id.data[4 * q + 2] = c[2]; id.data[4 * q + 3] = 255;
+    }
+    tctx.putImageData(id, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(cv, b.x, b.y, b.s, b.s);
+    ctx.strokeStyle = rgba(C.ink, 0.38);
+  } else {
+    ctx.strokeStyle = rgba(C.muted, 0.6);
+  }
+  ctx.lineWidth = 1;
+  ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.s - 1, b.s - 1);
+  const ring = (strong) => {
+    ctx.strokeStyle = rgba(strong ? C.ink : C.muted, 1);
+    ctx.lineWidth = strong ? 1.8 : 1.2;
+    ctx.strokeRect(b.x - 3, b.y - 3, b.s + 6, b.s + 6);
+  };
+  if (tgt && tgt.kind === kind && tgt.idx === idx) ring(true);
+  else if (state.hover && state.hover.kind === kind && state.hover.idx === idx) ring(false);
+}
+
+function drawNet() {
+  if (!L.w) return;
+  const ctx = netCtx, net = state.net, ex = state.expl, tgt = currentTarget();
+  ctx.clearRect(0, 0, L.w, L.h);
+  colLabel("INPUT", "28 × 28", (L.xIn0 + L.xIn1) / 2);
+  colLabel("LAYER 1", `${C1} maps`, L.xB1 + L.block1 / 2);
+  colLabel("LAYER 2", `${C2} maps`, L.xB2 + L.block2 / 2);
+  colLabel("OUTPUT", String(NO), L.xOut);
+
+  if (net && ex) {
+    const midY = L.top + L.avail / 2;
+    let m = maxAbs(ex.Ein);
+    if (m > 0) {
+      const fan = [];
+      for (let i = 0; i < C1; i++) {
+        const v = ex.Ein[i];
+        if (v === 0 || Math.abs(v) < 0.03 * m) continue;
+        const b = L.m1[i], y = b.y + b.s / 2;
+        const ys = L.yIn0 + L.sIn / 2 + (y - midY) * (L.sIn / L.avail) * 0.92;
+        fan.push([L.xIn1 + 1, ys, b.x - 1, y, v / m]);
+      }
+      drawEdges(fan);
+    }
+    m = maxAbs(ex.E12);
+    if (m > 0) {
+      const e = [];
+      for (let j = 0; j < C2; j++) for (let i = 0; i < C1; i++) {
+        const v = ex.E12[j * C1 + i];
+        if (v === 0 || Math.abs(v) < 0.05 * m) continue;
+        const a = L.m1[i], b = L.m2[j];
+        e.push([a.x + a.s + 1, a.y + a.s / 2, b.x - 1, b.y + b.s / 2, v / m]);
+      }
+      drawEdges(e);
+    }
+    m = maxAbs(ex.E23);
+    if (m > 0) {
+      const e = [];
+      for (let k = 0; k < NO; k++) for (let j = 0; j < C2; j++) {
+        const v = ex.E23[k * C2 + j];
+        if (v === 0 || Math.abs(v) < 0.04 * m) continue;
+        const b = L.m2[j];
+        e.push([b.x + b.s + 1, b.y + b.s / 2, L.out[k][0] - L.r3, L.out[k][1], v / m]);
+      }
+      drawEdges(e, 160);
+    }
+  }
+
+  // Input image: what the network actually sees
+  const ictx = inputTile.getContext("2d");
+  const id = ictx.createImageData(28, 28);
+  for (let p = 0; p < 784; p++) {
+    const v = net ? net.x[p] : 0;
+    const c = mix(C.panel, C.ink, v);
+    id.data[4 * p] = c[0]; id.data[4 * p + 1] = c[1]; id.data[4 * p + 2] = c[2]; id.data[4 * p + 3] = 255;
+  }
+  ictx.putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(inputTile, L.xIn0, L.yIn0, L.sIn, L.sIn);
+  ctx.strokeStyle = rgba(C.rule, 1);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(L.xIn0 + 0.5, L.yIn0 + 0.5, L.sIn - 1, L.sIn - 1);
+  ctx.font = "500 10px " + MONO;
+  ctx.fillStyle = rgba(C.muted, 1);
+  ctx.textAlign = "center";
+  const seesW = ctx.measureText("what it sees").width;
+  ctx.fillText("what it sees", Math.max(seesW / 2 + 1, L.xIn0 + L.sIn / 2), L.yIn0 + L.sIn + 14);
+
+  for (let i = 0; i < C1; i++) drawTile("m1", i);
+  for (let j = 0; j < C2; j++) drawTile("m2", j);
+
+  const ring = (x, y, r, strong) => {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = rgba(strong ? C.ink : C.muted, 1);
+    ctx.lineWidth = strong ? 1.8 : 1.2;
+    ctx.stroke();
+  };
+  for (let k = 0; k < NO; k++) {
+    const [x, y] = L.out[k];
+    const p = net ? net.p[k] : 0;
+    ctx.beginPath();
+    ctx.arc(x, y, L.r3, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(C.panel, 1);
+    ctx.fill();
+    if (p > 0.004) { ctx.fillStyle = rgba(C.ink, (0.1 + 0.9 * p).toFixed(3)); ctx.fill(); }
+    ctx.strokeStyle = rgba(C.ink, 0.35);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = rgba(p > 0.55 ? C.panel : C.ink, 1);
+    ctx.font = `600 ${Math.round(L.r3 * 1.05)}px ${MONO}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(k), x, y + 0.5);
+    ctx.textBaseline = "alphabetic";
+    if (tgt && tgt.kind === "out" && tgt.idx === k) ring(x, y, L.r3 + 3.5, true);
+    else if (state.hover && state.hover.kind === "out" && state.hover.idx === k) ring(x, y, L.r3 + 3.5, false);
+  }
+}
+
+/* ---------- Map tooltip (mouse hover) ---------- */
+const tip = $("#tip");
+function nodePos(t) {
+  if (t.kind === "out") return L.out[t.idx];
+  const b = boxOf(t);
+  return [b.x + b.s / 2, b.y + b.s / 2];
+}
+const nodeR = (t) => (t.kind === "out" ? L.r3 : boxOf(t).s / 2 + 2);
+function drawSta(cv, t) {
+  const { n, v } = staOf(t);
+  if (cv.width !== n) { cv.width = n; cv.height = n; }
+  const ctx = cv.getContext("2d"), id = ctx.createImageData(n, n);
+  for (let p = 0; p < n * n; p++) {
+    const c = mix(C.panel, C.ink, Math.pow(v[p], 1.25));
+    id.data[4 * p] = c[0]; id.data[4 * p + 1] = c[1]; id.data[4 * p + 2] = c[2]; id.data[4 * p + 3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+}
+function digitChart(el, r) {
+  const hi = new Set(r.top);
+  el.innerHTML =
+    `<div class="dbars">${r.pref.map((v, k) => `<span class="${hi.has(k) ? "hi" : ""}" style="height:${Math.max(4, Math.round(v * 100))}%"></span>`).join("")}</div>` +
+    `<div class="dnums">${r.pref.map((_, k) => `<span class="${hi.has(k) ? "hi" : ""}">${k}</span>`).join("")}</div>` +
+    `<span class="dcap">which digits fire it</span>`;
+}
+function showTip(t) {
+  if (!t || !L.w) { tip.hidden = true; return; }
+  const net = state.net, r = roleOf(t), now = $("#tip-now");
+  if (t.kind === "out") {
+    $("#tip-id").textContent = "Output neuron";
+    $("#tip-label").textContent = `Digit ${t.idx}`;
+    $("#tip-text").textContent = net
+      ? `Score ${net.z3[t.idx].toFixed(2)}. Softmax turns the ten scores into probabilities. Click to see the evidence for ${t.idx}.`
+      : `Its score becomes the probability for ${t.idx} once you draw.`;
+    now.textContent = net ? fmtPct(net.p[t.idx]) : "";
+    now.classList.remove("off");
+  } else {
+    const st = net ? mapStats(net, t) : null;
+    $("#tip-id").textContent = `Layer ${t.kind === "m1" ? 1 : 2} · filter ${t.idx + 1}`;
+    now.textContent = !st ? "" : st.peak > 0 ? `peak ${st.peak.toFixed(2)}` : "silent now";
+    now.classList.toggle("off", !(st && st.peak > 0));
+    $("#tip-label").textContent = r ? r.label : `Layer ${t.kind === "m1" ? 1 : 2} · filter ${t.idx + 1}`;
+    $("#tip-text").textContent = r ? r.text : "Click to see where it fires in your drawing.";
+    if (r) { drawSta($("#tip-sta"), t); digitChart($("#tip-chart"), r); $("#tip-foot").textContent = r.foot; }
+  }
+  $("#tip-vis").hidden = !r;
+  $("#tip-foot").hidden = !r;
+  tip.hidden = false;
+  const [x, y] = nodePos(t), rad = nodeR(t), w = tip.offsetWidth, h = tip.offsetHeight;
+  let left = x + rad + 14;
+  if (left + w > L.w) left = x - rad - 14 - w;
+  tip.style.left = Math.max(0, Math.min(L.w - w, left)) + "px";
+  tip.style.top = Math.max(0, Math.min(L.h - h, y - h / 2)) + "px";
+}
+
+function hitNet(x, y) {
+  let best = null, bd = Infinity;
+  const consider = (kind, idx, cx, cy, inside) => {
+    const d = Math.hypot(cx - x, cy - y);
+    if (inside && d < bd) { bd = d; best = { kind, idx }; }
+  };
+  const box = (kind, list) => (list || []).forEach((b, i) => {
+    const pad = 4;
+    consider(kind, i, b.x + b.s / 2, b.y + b.s / 2, x >= b.x - pad && x <= b.x + b.s + pad && y >= b.y - pad && y <= b.y + b.s + pad);
+  });
+  box("m1", L.m1);
+  box("m2", L.m2);
+  (L.out || []).forEach((p, k) => consider("out", k, p[0], p[1], Math.hypot(p[0] - x, p[1] - y) < Math.max(L.r3 + 5, 9)));
+  return best;
+}
+netCv.addEventListener("pointermove", (e) => {
+  if (e.pointerType !== "mouse") return;
+  const r = netCv.getBoundingClientRect();
+  const hit = hitNet(e.clientX - r.left, e.clientY - r.top);
+  if (!sameT(hit, state.hover)) {
+    state.hover = hit;
+    netCv.style.cursor = hit ? "pointer" : "default";
+    drawNet();
+    showTip(hit);
+  }
+});
+netCv.addEventListener("pointerleave", () => { if (state.hover) { state.hover = null; drawNet(); } showTip(null); });
+netCv.addEventListener("click", (e) => {
+  const r = netCv.getBoundingClientRect();
+  const hit = hitNet(e.clientX - r.left, e.clientY - r.top);
+  if (hit) select(hit);
+});
+
+function select(t) {
+  if (!state.net) return;
+  state.target = t;
+  update();
+}
+$("#follow").addEventListener("click", () => { state.target = null; update(); });
+
+/* ---------- Answer ---------- */
+const fmtPct = (v) => v >= 0.9995 ? ">99.9%" : v < 0.0005 ? "<0.1%" : (v * 100).toFixed(1) + "%";
+const signed = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
+const barRows = [];
+(function buildBars() {
+  const ol = $("#bars");
+  for (let k = 0; k < NO; k++) {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "bar-row";
+    b.innerHTML = `<span class="d">${k}</span><span class="track"><span class="fill"></span></span><span class="pct">–</span>`;
+    b.addEventListener("click", () => select({ kind: "out", idx: k }));
+    li.appendChild(b);
+    ol.appendChild(li);
+    barRows.push({ el: b, fill: b.querySelector(".fill"), pct: b.querySelector(".pct") });
+  }
+})();
+
+function verdictText(p, top, second) {
+  const pt = p[top];
+  if (pt >= 0.9) return `Confident it’s a ${top}`;
+  if (pt >= 0.65) return `Probably a ${top}`;
+  if (pt >= 0.4) return `Torn between ${top} and ${second}`;
+  return `Unsure, best guess ${top}`;
+}
+function renderAnswer() {
+  const net = state.net, big = $("#big"), tgt = currentTarget();
+  if (!net) {
+    big.textContent = "?";
+    big.classList.add("idle");
+    $("#verdict").textContent = "Waiting for a digit";
+    $("#runner").textContent = "Draw anything from 0 to 9 on the pad.";
+    barRows.forEach((r, k) => {
+      r.fill.style.width = "0%";
+      r.pct.textContent = "–";
+      r.el.classList.remove("top", "sel");
+      r.el.disabled = true;
+      r.el.setAttribute("aria-label", `Digit ${k}`);
+    });
+    return;
+  }
+  const p = net.p;
+  const order = Array.from(p.keys()).sort((a, b) => p[b] - p[a]);
+  const top = order[0], second = order[1];
+  big.textContent = String(top);
+  big.classList.remove("idle");
+  $("#verdict").textContent = verdictText(p, top, second);
+  $("#runner").textContent = `${fmtPct(p[top])} sure · next best ${second} at ${fmtPct(p[second])}`;
+  barRows.forEach((r, k) => {
+    r.fill.style.width = (p[k] * 100).toFixed(2) + "%";
+    r.pct.textContent = fmtPct(p[k]);
+    r.el.classList.toggle("top", k === top);
+    r.el.classList.toggle("sel", !!tgt && tgt.kind === "out" && tgt.idx === k);
+    r.el.disabled = false;
+    r.el.setAttribute("aria-label", `Digit ${k}: ${fmtPct(p[k])}. Show the evidence for ${k}.`);
+  });
+}
+function announce(msg) {
+  const el = $("#announce");
+  if (msg) { el.textContent = msg; return; }
+  if (!state.strokes.length) return;
+  const net = state.net || forward(toInput(state.strokes));
+  el.textContent = `The network reads ${net.pred}, ${fmtPct(net.p[net.pred])} sure.`;
+}
+
+/* ---------- Inspector ---------- */
+const mapLooks = $("#map-looks"), mapFound = $("#map-found");
+function drawMap(cv, vals, norm, x) {
+  // Diverging map: orange where vals > 0, blue where < 0, over a faint copy of the input (x).
+  const n = cv.width, ctx = cv.getContext("2d");
+  const id = ctx.createImageData(n, n);
+  for (let p = 0; p < n * n; p++) {
+    let base = C.panel;
+    if (x) base = mix(C.panel, C.ink, 0.16 * x[p]);
+    let c = base;
+    if (vals && norm > 0) {
+      const t = Math.max(-1, Math.min(1, vals[p] / norm));
+      c = t >= 0 ? mix(base, C.for, Math.pow(t, 0.7)) : mix(base, C.against, Math.pow(-t, 0.7));
+    }
+    id.data[4 * p] = c[0]; id.data[4 * p + 1] = c[1]; id.data[4 * p + 2] = c[2]; id.data[4 * p + 3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+}
+function drawFires(cv, net, t) {
+  // Where the map fires, in ink, over a faint copy of the drawing. A layer-2 spot covers 2 x 2 pixels.
+  const ctx = cv.getContext("2d"), id = ctx.createImageData(28, 28);
+  const m1 = t.kind === "m1", a = m1 ? net.a1 : net.a2, scale = (m1 ? META.scale1 : META.scale2)[t.idx];
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      const p = y * 28 + x;
+      const v = m1 ? a[t.idx * 784 + p] : a[t.idx * 196 + (y >> 1) * 14 + (x >> 1)];
+      const base = mix(C.panel, C.muted, 0.22 * net.x[p]);
+      const c = mix(base, C.ink, Math.pow(Math.min(1, v / scale), 0.8));
+      id.data[4 * p] = c[0]; id.data[4 * p + 1] = c[1]; id.data[4 * p + 2] = c[2]; id.data[4 * p + 3] = 255;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+}
+/* The filter's own weights: one 5 x 5 grid for layer 1; one per layer-1 map for layer 2,
+   all on a shared scale so weak slices look weak. */
+const kern1 = $("#kern1"), kern2 = $("#kern2"), kern2Cv = [];
+for (let i = 0; i < C1; i++) {
+  const cell = document.createElement("div");
+  cell.className = "kcell";
+  cell.innerHTML = `<canvas width="5" height="5"></canvas><span>#${i + 1}</span>`;
+  kern2.appendChild(cell);
+  kern2Cv.push(cell.querySelector("canvas"));
+}
+function drawKernel(t) {
+  if (t.kind === "m1") {
+    const w = K1.subarray(t.idx * KK, (t.idx + 1) * KK);
+    drawMap(kern1, w, maxAbs(w), null);
+  } else {
+    const all = K2.subarray(t.idx * C1 * KK, (t.idx + 1) * C1 * KK), m = maxAbs(all);
+    for (let i = 0; i < C1; i++) drawMap(kern2Cv[i], all.subarray(i * KK, (i + 1) * KK), m, null);
+  }
+  kern1.hidden = t.kind !== "m1";
+  kern2.hidden = t.kind !== "m2";
+  $("#kern-cap").textContent = t.kind === "m1"
+    ? "Its filter: 25 weights, used at every spot"
+    : `Its filter: 5 × 5 weights on each of the ${C1} layer-1 maps`;
+}
+/* A pen dab inks a small blob, not one pixel, so "where more ink would help"
+   is the sensitivity summed over the pen's footprint (same renderer, R and S). */
+const DAB = render(new Float64Array([14.5, 14.5, 14.5, 14.5]), 1, META.R, META.S);
+function dabMap(g) {
+  const out = new Float64Array(784);
+  for (let y = 0; y < 28; y++) {
+    for (let x = 0; x < 28; x++) {
+      let s = 0;
+      for (let dy = -2; dy <= 2; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy > 27) continue;
+        for (let dx = -2; dx <= 2; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx > 27) continue;
+          s += DAB[(14 + dy) * 28 + 14 + dx] * g[yy * 28 + xx];
+        }
+      }
+      out[y * 28 + x] = s;
+    }
+  }
+  return out;
+}
+function robustMax(a, q) {
+  const s = Array.from(a, Math.abs).sort((u, v) => u - v);
+  return s[Math.min(s.length - 1, Math.floor(q * s.length))] || 0;
+}
+function chipGroup(label, items) {
+  if (!items.length) return "";
+  const chips = items.map((c) => `<button type="button" class="chip ${c.v >= 0 ? "pos" : "neg"}" data-kind="${c.kind}" data-idx="${c.idx}"><i></i>${c.text}</button>`).join("");
+  return `<div class="chip-group"><span class="chip-label">${label}</span><div class="chips">${chips}</div></div>`;
+}
+function topContrib(vals, n, kind, fmt, nPos, nNeg) {
+  const idx = Array.from({ length: n }, (_, i) => i).filter((i) => vals[i] !== 0);
+  const pos = idx.filter((i) => vals[i] > 0).sort((a, b) => vals[b] - vals[a]).slice(0, nPos);
+  const neg = idx.filter((i) => vals[i] < 0).sort((a, b) => vals[a] - vals[b]).slice(0, nNeg);
+  return pos.concat(neg).map((i) => ({ kind, idx: i, v: vals[i], text: fmt(i, vals[i]) }));
+}
+$("#insp-chips").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip");
+  if (b) select({ kind: b.dataset.kind, idx: Number(b.dataset.idx) });
+});
+
+function renderInspector() {
+  const net = state.net, t = currentTarget(), ex = state.expl;
+  $("#follow").hidden = !(state.target && net);
+  const name = $("#insp-name"), badge = $("#insp-badge"), stats = $("#insp-stats"), expl = $("#insp-explain"), chips = $("#insp-chips");
+  const eyebrow = $("#insp-eyebrow"), figKern = $("#fig-kern"), roleBox = $("#insp-role"), looksCap = $("#looks-cap");
+  const r = roleOf(t);
+  const isMap = !!(net && t && t.kind !== "out");
+  figKern.hidden = !isMap;
+  roleBox.hidden = !(net && r);
+  if (net && r) {
+    $("#insp-role-text").textContent = r.text;
+    drawSta($("#insp-sta"), t);
+    digitChart($("#insp-role-chart"), r);
+    $("#insp-role-foot").textContent = r.foot;
+  }
+  if (!net || !t || !ex) {
+    eyebrow.textContent = "";
+    name.textContent = "Nothing to inspect yet";
+    badge.hidden = true;
+    stats.innerHTML = "";
+    expl.textContent = "Draw a digit, then tap any feature map in the diagram or any digit in the answer to see what it responds to.";
+    chips.innerHTML = "";
+    looksCap.textContent = "Where more ink would help or hurt";
+    drawMap(mapLooks, null, 0, null);
+    drawMap(mapFound, null, 0, null);
+    return;
+  }
+  drawMap(mapFound, ex.found, maxAbs(ex.found), net.x);
+  const labelled = (kind, i) => `${kind === "m1" ? "L1" : "L2"} #${i + 1}` + (ROLES ? ` · ${(kind === "m1" ? ROLES.m1 : ROLES.m2)[i].label}` : "");
+  const L2name = (j) => labelled("m2", j), L1name = (i) => labelled("m1", i);
+  if (t.kind === "out") {
+    const k = t.idx, z = net.z3[k];
+    looksCap.textContent = "Where more ink would help or hurt";
+    const looks = dabMap(ex.gx);
+    drawMap(mapLooks, looks, robustMax(looks, 0.99), null);
+    eyebrow.textContent = `Output · digit ${k}`;
+    name.textContent = `Evidence for ${k}`;
+    badge.hidden = k !== net.pred;
+    stats.innerHTML = `<span><em>score</em> ${z.toFixed(2)}</span><span><em>probability</em> ${fmtPct(net.p[k])}</span><span><em>from pixels</em> ${signed(ex.foundSum)}</span><span><em>fixed offset</em> ${signed(z - ex.foundSum)}</span>`;
+    expl.textContent = `Orange pixels in your drawing raised the score for ${k} and blue pixels lowered it; together with a fixed offset they add up exactly to the score. The left map shows where a dab of extra ink would raise it (orange) or lower it (blue), given where each filter is firing right now.`;
+    const contrib = new Float64Array(C2);
+    for (let j = 0; j < C2; j++) contrib[j] = ex.E23[k * C2 + j];
+    chips.innerHTML = chipGroup(`Layer-2 maps with the biggest say on ${k}`, topContrib(contrib, C2, "m2", (j, v) => `${L2name(j)} ${signed(v)}`, 3, 2));
+    return;
+  }
+  drawKernel(t);
+  looksCap.textContent = "Where it fires in your drawing";
+  drawFires(mapLooks, net, t);
+  const st = mapStats(net, t), on = st.peak > 0;
+  badge.hidden = true;
+  stats.innerHTML = on
+    ? `<span><em>peak</em> ${st.peak.toFixed(2)}</span><span><em>total</em> ${st.total.toFixed(2)}</span><span><em>firing at</em> ${st.firing} of ${st.n} spots</span>`
+    : `<span><em>silent</em> no spot rises above zero (best ${signed(st.peak)})</span>`;
+  if (t.kind === "m2") {
+    const j = t.idx;
+    eyebrow.textContent = `Layer 2 · filter ${j + 1} of ${C2}`;
+    name.textContent = r ? r.label : `Layer 2 · filter ${j + 1}`;
+    expl.textContent = `Its filter weighs a 5 × 5 patch of all ${C1} layer-1 maps at once, so it fires where a particular arrangement of edges turns up. Traced back to pixels, the right-hand map shows which strokes fed its total (orange) and which held it back (blue).`;
+    const v = new Float64Array(NO);
+    for (let k = 0; k < NO; k++) v[k] = ex.E23[k * C2 + j];
+    chips.innerHTML = (on ? chipGroup("Driven by", topContrib(ex.Ein, C1, "m1", (i, val) => `${L1name(i)} ${signed(val)}`, 3, 2)) : "") +
+      (on ? chipGroup("Its votes", topContrib(v, NO, "out", (k, val) => `→ ${k} ${signed(val)}`, 2, 2)) : "");
+  } else {
+    const i = t.idx;
+    eyebrow.textContent = `Layer 1 · filter ${i + 1} of ${C1}`;
+    name.textContent = r ? r.label : `Layer 1 · filter ${i + 1}`;
+    expl.textContent = "Its 25 weights are slid across every spot of the drawing: orange weights reward ink and blue ones penalise it, and the map lights up wherever the reward wins. The right-hand map shows which pixels produced its total.";
+    const feeds = new Float64Array(C2);
+    for (let j = 0; j < C2; j++) feeds[j] = ex.E12[j * C1 + i];
+    const knock = new Float64Array(NO);
+    for (let k = 0; k < NO; k++) { let s = 0; for (let j = 0; j < C2; j++) s += ex.E23[k * C2 + j]; knock[k] = s; }
+    chips.innerHTML = on ? chipGroup("Feeds", topContrib(feeds, C2, "m2", (jj, val) => `${L2name(jj)} ${signed(val)}`, 3, 2)) +
+      chipGroup("Knock-on effect", topContrib(knock, NO, "out", (k, val) => `→ ${k} ${signed(val)}`, 2, 2)) : "";
+  }
+}
+
+function renderCaption() {
+  const t = currentTarget(), el = $("#net-caption");
+  if (!state.net || !t) { el.textContent = "Each tile is a feature map: it lights up wherever its filter finds its pattern. Draw a digit to watch the evidence flow."; return; }
+  if (t.kind === "out") el.textContent = `Each tile shows where its filter fires. Lines trace each map’s push on the score for ${t.idx}: orange raises it, blue lowers it, and thicker means stronger. Tap any map or digit to follow it instead.`;
+  else if (t.kind === "m2") el.textContent = `Showing what drives layer-2 filter ${t.idx + 1}, and how its map votes on each digit.`;
+  else el.textContent = `Showing what layer-1 filter ${t.idx + 1} passes on, and its knock-on effect on each digit.`;
+}
+
+/* ---------- Update loop ---------- */
+let raf = 0;
+function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; update(); }); }
+function update() {
+  drawPad();
+  state.net = state.strokes.length ? forward(toInput(state.strokes)) : null;
+  if (!state.net) state.target = null;
+  const t = currentTarget();
+  state.expl = state.net && t ? explain(state.net, t) : null;
+  drawNet();
+  renderAnswer();
+  renderInspector();
+  renderCaption();
+  if (state.hover) showTip(state.hover);
+  $("#undo").disabled = !state.strokes.length;
+  $("#clear").disabled = !state.strokes.length;
+}
+
+/* ---------- Boot ---------- */
+readTheme();
+sizePad();
+layoutNet();
+showExample(false, EXAMPLES.find((e) => e.label === META.firstExample) || EXAMPLES[0]);
+update();
+new ResizeObserver(() => { sizePad(); drawPad(); }).observe($("#pad-wrap"));
+new ResizeObserver(() => { layoutNet(); drawNet(); if (state.hover) showTip(state.hover); }).observe($("#net-wrap"));
+const refreshTheme = () => { readTheme(); update(); };
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshTheme);
+new MutationObserver(refreshTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { layoutNet(); drawNet(); });
+
+/* Test hook: run the exact page pipeline on given strokes. */
+window.__digitReader = {
+  input: (strokes) => Array.from(toInput(strokes)),
+  predict: (strokes) => { const r = forward(toInput(strokes)); return { pred: r.pred, p: Array.from(r.p), z: Array.from(r.z3) }; },
+  evidence: (strokes, t) => {
+    const r = forward(toInput(strokes)), e = explain(r, t);
+    return { gx: Array.from(e.gx), foundSum: e.foundSum, total: e.total, Ein: Array.from(e.Ein), E12: Array.from(e.E12), E23: Array.from(e.E23) };
+  },
+  select: (t) => select(t),
+  state: () => ({ strokes: state.strokes.length, pred: state.net ? state.net.pred : null, example: state.isExample }),
+  layout: () => ({ m1: L.m1, m2: L.m2, out: L.out }),
+};
+})();
+</script>

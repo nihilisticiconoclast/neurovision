@@ -8,24 +8,25 @@
 
 ---
 
-## Two versions
+## Three versions
 
-This repo holds two takes on the same brief: Google Gemini's original NeuroVision in `gemini/`, and Anthropic Claude's Neural Digit Reader in `claude/`. Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the other. Both are single HTML files that also run on their own.
+This repo holds takes on the same brief from two models: Google Gemini's original NeuroVision in `gemini/`, and two from Anthropic's Claude. Claude's Neural Digit Reader in `claude/` is a dense network like Gemini's. Its Convolutional Digit Reader in `claude/cnn/` reads digits with a convolutional network instead. Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the others. All three are single HTML files that also run on their own.
 
-| | Gemini (`gemini/index.html`) | Claude (`claude/index.html`) |
-| :--- | :--- | :--- |
-| Network | `784 → 64 → 32 → 10`, ReLU, softmax | `784 → 64 → 32 → 10`, ReLU, softmax |
-| Training data | 175 synthetic digits rendered from one stroke template per digit (plus five style variants), shifted and scaled | 55,000 MNIST digits, half of them re-drawn as pen strokes with random slant, wobble and pen size |
-| Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page |
-| MNIST test set (10,000 digits) | 43.5% | 98.6% |
-| 400 MNIST test digits drawn as pen strokes, through each app's own drawing pipeline | 44.2% | 98.0% |
-| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples |
+| | Gemini (`gemini/index.html`) | Claude (`claude/index.html`) | Claude CNN (`claude/cnn/index.html`) |
+| :--- | :--- | :--- | :--- |
+| Network | `784 → 64 → 32 → 10`, ReLU, softmax | `784 → 64 → 32 → 10`, ReLU, softmax | Two convolution layers (8, then 16 filters of 5×5, each followed by 2×2 max pooling) `→ 10`, ReLU, softmax |
+| Weights | 52,650 | 52,650 | 11,274 |
+| Training data | 175 synthetic digits rendered from one stroke template per digit (plus five style variants), shifted and scaled | 55,000 MNIST digits, half of them re-drawn as pen strokes with random slant, wobble and pen size | The same digits and mix as Claude's dense network |
+| Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page | Offline in NumPy (same folder); weights embedded in the page |
+| MNIST test set (10,000 digits) | 43.5% | 98.6% | 99.3% |
+| 400 MNIST test digits drawn as pen strokes, through each app's own drawing pipeline | 44.2% | 98.0% | 98.5% |
+| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples | Live feature maps for every filter, exact per-pixel evidence maps, evidence flow through the maps, measured filter roles on hover, each filter's weights in the inspector, animated examples |
 
-Both networks were scored on identical images. Gemini's weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, its weights can differ slightly between browsers.
+All three networks were scored on identical images. Gemini's weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, its weights can differ slightly between browsers.
 
 ---
 
-## ✨ Key Features (Gemini version)
+## Key Features (Gemini version)
 
 ### 1. Interactive Digit Studio & MNIST Preprocessing
 - **Smooth Freehand Canvas**: Supports mouse and touch input with adjustable brush thickness (`12px`–`30px`), a one-click **Clear Canvas** action, a **Random** sample generator, and instant handwritten presets (`0`–`9`).
@@ -53,9 +54,9 @@ Displays 6 specialized structural detectors that show *how* the network decompos
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-Because each version is a single HTML file, no build step or server installation is required. The root `index.html` holds the version switcher; `gemini/index.html` and `claude/index.html` also open on their own.
+Because each version is a single HTML file, no build step or server installation is required. The root `index.html` holds the version switcher; `gemini/index.html`, `claude/index.html` and `claude/cnn/index.html` also open on their own.
 
 ### Option 1: Open Directly
 1. Clone this repository:
@@ -77,7 +78,7 @@ Then visit `http://localhost:8080` in your browser.
 
 ---
 
-## 🛠️ Architecture Overview
+## Architecture Overview
 
 | Layer | Dimensions | Activation | Role |
 | :--- | :--- | :--- | :--- |
@@ -99,6 +100,17 @@ Then visit `http://localhost:8080` in your browser.
 
 ---
 
-## 📄 License
+## Claude CNN: Convolutional Digit Reader
+
+- The same instrument as the dense page (pad, examples, answer card, inspector) with a convolutional network inside. Eight 5×5 filters look for edges, sixteen more combine those into shapes, and each digit's score weighs the sixteen 7×7 maps that result.
+- Every feature map is drawn as a tile that lights up wherever its filter fires on your drawing. Orange or blue wires show which maps push the selected digit's score up or down.
+- Hover over a map to see what its filter responds to, such as "Upright strokes", "Top of an arch" or "Pocket under a bar". The roles are measured: each filter was shown 65 probe shapes drawn with the page's own pen (strokes at 12 angles, stroke ends, corners, curves, junctions, loops) and scored on 20,000 test digits, then checked by eye. Several layer-2 filters turn out to fire on empty space framed by strokes, such as the pocket under a 5's top bar.
+- Tap any digit or map to inspect it: the filter's own weights, where it fires in your drawing, and which pixels produced its output. As on the dense page, the pixel maps add up exactly to the score, because a ReLU and max-pool network is linear while its on/off pattern and pooling winners are fixed.
+- It has a fifth of the dense network's weights (11,274 against 52,650) and scores higher: 99.3% against 98.6% on the MNIST test set, and 98.7% against 98.1% on the test digits re-drawn as pen strokes. On the 600 hand-designed digits in other styles it gets 599, missing one flagged 1; the dense network gets all 600.
+- Same stroke pipeline as the dense page, so its inputs are bit-identical to Python's too. Training code, weights and steps to reproduce: the `cnn_` files in [`claude/training/`](claude/training/).
+
+---
+
+## License
 
 Distributed under the MIT License. Feel free to fork, experiment with hidden layer dimensions, or embed the visualizer in educational machine learning projects.
