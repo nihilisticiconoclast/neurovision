@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NeuroVision</title>
-<meta name="description" content="Two handwritten-digit neural networks built from the same brief by Google's Gemini and Anthropic's Claude. Switch between them.">
+<meta name="description" content="Handwritten-digit neural networks built by Google's Gemini (MLP and CNN) and Anthropic's Claude. Switch between them.">
 <style>
   :root {
     --bar: #f5f7fa;
@@ -83,13 +83,15 @@
   <span class="name">NeuroVision</span>
   <div class="switch" role="group" aria-label="Version">
     <button type="button" data-version="gemini" aria-pressed="true">Gemini</button>
+    <button type="button" data-version="gemini-cnn" aria-pressed="false">Gemini CNN</button>
     <button type="button" data-version="claude" aria-pressed="false">Claude</button>
   </div>
   <span class="about" id="about"></span>
   <a class="open" id="open" href="gemini/index.html" target="_blank" rel="noopener"><span class="long">Open on its own</span><span class="short">Full page</span></a>
 </header>
 <main class="frames">
-  <iframe id="frame-gemini" title="NeuroVision, Gemini version"></iframe>
+  <iframe id="frame-gemini" title="NeuroVision, Gemini MLP version"></iframe>
+  <iframe id="frame-gemini-cnn" title="NeuroVision, Gemini CNN version" hidden></iframe>
   <iframe id="frame-claude" title="Neural Digit Reader, Claude version" hidden></iframe>
 </main>
 <script>
@@ -97,7 +99,11 @@
   const VERSIONS = {
     gemini: {
       src: "gemini/index.html",
-      about: "Built by Google’s Gemini. The network trains in your browser on synthetic digits each time the page loads; try the temperature slider and live re-training.",
+      about: "Built by Google’s Gemini. An MLP that trains in your browser on synthetic digits each time the page loads; try the temperature slider and live re-training.",
+    },
+    "gemini-cnn": {
+      src: "gemini-cnn/index.html",
+      about: "Built by Google’s Gemini. A 2-layer convolutional neural network trained offline on MNIST + multi-style strokes; inspect live 3×3 kernels, Conv2 feature maps, and exact Grad-CAM.",
     },
     claude: {
       src: "claude/index.html",

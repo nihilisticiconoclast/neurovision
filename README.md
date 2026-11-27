@@ -8,18 +8,18 @@
 
 ---
 
-## Two versions
+## Three versions
 
-This repo holds two takes on the same brief: Google Gemini's original NeuroVision in `gemini/`, and Anthropic Claude's Neural Digit Reader in `claude/`. Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the other. Both are single HTML files that also run on their own.
+This repo holds three takes on handwritten-digit recognition: Google Gemini's original NeuroVision MLP in `gemini/`, Google Gemini's Convolutional Neural Network in `gemini-cnn/`, and Anthropic Claude's Neural Digit Reader in `claude/`. Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the others. All three are self-contained single HTML files that also run on their own.
 
-| | Gemini (`gemini/index.html`) | Claude (`claude/index.html`) |
-| :--- | :--- | :--- |
-| Network | `784 → 64 → 32 → 10`, ReLU, softmax | `784 → 64 → 32 → 10`, ReLU, softmax |
-| Training data | 175 synthetic digits rendered from one stroke template per digit (plus five style variants), shifted and scaled | 55,000 MNIST digits, half of them re-drawn as pen strokes with random slant, wobble and pen size |
-| Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page |
-| MNIST test set (10,000 digits) | 43.5% | 98.6% |
-| 400 MNIST test digits drawn as pen strokes, through each app's own drawing pipeline | 44.2% | 98.0% |
-| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples |
+| | Gemini (`gemini/index.html`) | Gemini CNN (`gemini-cnn/index.html`) | Claude (`claude/index.html`) |
+| :--- | :--- | :--- | :--- |
+| Network | `784 → 64 → 32 → 10`, ReLU, softmax (52,650 params) | `1×28×28 → Conv(8×3×3) → Pool → Conv(16×3×3) → Pool → 32 → 10`, ReLU, softmax (26,698 params) | `784 → 64 → 32 → 10`, ReLU, softmax (52,650 params) |
+| Training data | 175 synthetic digits rendered from one stroke template per digit (plus five style variants), shifted and scaled | 56,000 augmented MNIST digits (affine + thickness jitter) + 3,840 multi-style hand-drawn pen strokes | 55,000 MNIST digits, half of them re-drawn as pen strokes with random slant, wobble and pen size |
+| Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`gemini-cnn/training/`](gemini-cnn/training/)); weights embedded in the page | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page |
+| MNIST test set (10,000 digits) | 43.5% | 99.32% | 98.6% |
+| Multi-style hand-drawn stroke digits (600 digits) | — | 100.0% | 100.0% |
+| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Live 8 Conv1 3×3 kernels & feature maps, interactive 3×3 sliding-window inspector, 16 Conv2 channels, exact Grad-CAM & input gradient saliency, temperature slider, live dense-head fine-tuning | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples |
 
 Both networks were scored on identical images. Gemini's weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, its weights can differ slightly between browsers.
 
