@@ -472,13 +472,14 @@
   /* Conv1 Grid (8 filters) */
   .conv1-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
   @media (max-width: 520px) {
-    .conv1-grid { grid-template-columns: repeat(2, 1fr); }
+    .conv1-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   .filter-tile {
+    min-width: 0;
     background: var(--panel);
     border: 1px solid rgba(30, 41, 59, 0.95);
     border-radius: 11px;
@@ -633,11 +634,11 @@
   /* Conv2 Grid (16 channels) */
   .conv2-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
   @media (max-width: 520px) {
-    .conv2-grid { grid-template-columns: repeat(2, 1fr); }
+    .conv2-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   .c2-tile {
     background: var(--panel);
