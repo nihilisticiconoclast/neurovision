@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Which digit reader is best? · NeuroVision</title>
+<meta name="description" content="Gemini's and Claude's handwritten-digit networks, two from each model, scored on the same digits: MNIST, pen-drawn digits, 24 handwriting styles and small drawings.">
+<style>
+  /* Neutral ground for a page about both models: the switcher's own colours and system type.
+     Series colours are the dataviz reference palette, slots 1-4, validated on both card surfaces. */
+  :root {
+    color-scheme: light;
+    --page: #f5f7fa;
+    --surface: #ffffff;
+    --ink: #121a25;
+    --muted: #5a6677;
+    --rule: #d6dce4;
+    --grid: #e6eaef;
+    --base: #b9c1cc;
+    --context: #cbd2db;
+    --focus: #1f6bcf;
+    --shadow: 0 6px 20px rgba(18, 26, 37, 0.14);
+    --s1: #257de0;   /* Gemini MLP */
+    --s2: #f47230;   /* Claude MLP */
+    --s3: #00b894;   /* Gemini CNN */
+    --s4: #f2a600;   /* Claude CNN */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0b0f15; --surface: #161b22; --ink: #e6ebf2; --muted: #8e9bad; --rule: #263040;
+      --grid: #222a36; --base: #46505e; --context: #3a4452; --focus: #519eff;
+      --shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      --s1: #338ced; --s2: #e76624; --s3: #00a888; --s4: #d28e05;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0b0f15; --surface: #161b22; --ink: #e6ebf2; --muted: #8e9bad; --rule: #263040;
+    --grid: #222a36; --base: #46505e; --context: #3a4452; --focus: #519eff;
+    --shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    --s1: #338ced; --s2: #e76624; --s3: #00a888; --s4: #d28e05;
+  }
+  .s1 { --c: var(--s1); } .s2 { --c: var(--s2); } .s3 { --c: var(--s3); } .s4 { --c: var(--s4); }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    padding: 24px max(16px, env(safe-area-inset-right, 0px)) 44px max(16px, env(safe-area-inset-left, 0px));
+  }
+  main { max-width: 1080px; margin: 0 auto; display: grid; gap: 16px; }
+  a { color: inherit; text-underline-offset: 2px; }
+  a:hover { color: var(--focus); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+  b, strong { font-weight: 650; }
+
+  /* Header */
+  h1 { margin: 0; font-size: clamp(26px, 4.2vw, 36px); line-height: 1.1; font-weight: 750; letter-spacing: -0.015em; text-wrap: balance; }
+  .lede { margin: 10px 0 0; max-width: 64ch; color: var(--muted); font-size: 16px; text-wrap: pretty; }
+  .meta { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; min-width: 0; }
+  h2 { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 650; }
+  .sub { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; max-width: 72ch; text-wrap: pretty; }
+  .note { margin: 14px 0 0; color: var(--muted); font-size: 13.5px; max-width: 80ch; text-wrap: pretty; }
+  .note b { color: var(--ink); }
+  .note.footnote { margin-top: 6px; }
+
+  /* Short answer */
+  .answer { font-size: 16px; line-height: 1.55; }
+  .answer p { margin: 0; max-width: 78ch; text-wrap: pretty; }
+
+  /* Verdict tiles */
+  .tiles { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 600px) {
+    .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .tile { grid-column: span 2; }
+    .tile:nth-child(n+4) { grid-column: span 3; }
+  }
+  @media (min-width: 980px) {
+    .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .tile, .tile:nth-child(n+4) { grid-column: auto; }
+  }
+  .tile { display: flex; flex-direction: column; gap: 4px; padding: 14px; }
+  .tile .label { margin: 0; color: var(--muted); font-size: 13px; }
+  .tile .value { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 650; line-height: 1.25; }
+  .tile .detail { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; text-wrap: pretty; }
+  .keys { display: inline-flex; gap: 3px; flex: none; }
+  .dotkey { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+
+  /* Chart cards */
+  .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 16px; }
+  .toggle {
+    flex: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
+    background: transparent; border: 1px solid var(--rule); border-radius: 6px; min-height: 32px; padding: 0 12px; cursor: pointer;
+  }
+  .toggle:hover { color: var(--ink); border-color: var(--base); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--c); }
+  .linekey { display: inline-block; width: 16px; height: 3px; border-radius: 2px; background: var(--c); flex: none; }
+
+  .bars { margin-top: 8px; }
+  .bgroup + .bgroup { margin-top: 6px; }
+  .gtitle { margin: 10px 0 2px; font-size: 13.5px; line-height: 1.35; }
+  .gtitle span { color: var(--muted); }
+  .gtitle b { margin-right: 6px; }
+  svg { display: block; overflow: visible; }
+  svg text { font-family: inherit; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .baseline { stroke: var(--base); stroke-width: 1; }
+  .bar { fill: var(--c); transition: opacity 120ms; }
+  .rowlabel { font-size: 13px; fill: var(--ink); }
+  .value { font-size: 13px; font-weight: 650; fill: var(--ink); font-variant-numeric: tabular-nums; }
+  .tick { font-size: 11.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .tick.small { font-size: 10.5px; }
+  .value.small { font-size: 12px; }
+  .halo { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .hit { fill: transparent; cursor: default; outline: none; }
+  .hit:focus-visible { stroke: var(--focus); stroke-width: 2px; }
+  .hovering .bar:not(.on), .hovering .dot:not(.on) { opacity: 0.45; }
+
+  .panels { display: grid; gap: 14px 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
+  @media (min-width: 900px) { .panels { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 359px) { .panels { grid-template-columns: minmax(0, 1fr); } }
+  .panel { margin: 0; min-width: 0; }
+  .panel figcaption { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; margin-bottom: 4px; }
+  .line { fill: none; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .context { fill: none; stroke: var(--context); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+  .dot { fill: var(--c); stroke: var(--surface); stroke-width: 2; transition: opacity 120ms; }
+  .dot.on { r: 6.5px; }
+
+  /* Table views */
+  .table-wrap { margin-top: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  table + table { margin-top: 18px; }
+  caption { text-align: left; color: var(--muted); font-size: 13px; padding-bottom: 6px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; }
+  thead th { color: var(--muted); font-weight: 600; font-size: 12.5px; vertical-align: bottom; white-space: normal; }
+  td { font-variant-numeric: tabular-nums; }
+  td .n { display: block; color: var(--muted); font-size: 12px; }
+  td .star { display: inline-block; width: 0; overflow: visible; }
+  td.name { font-variant-numeric: normal; }
+  .namecell { display: inline-flex; align-items: center; gap: 7px; }
+
+  /* The four networks */
+  .section-head { margin: 8px 0 0; }
+  .specs { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 600px) { .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 980px) { .specs { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .spec { display: flex; flex-direction: column; }
+  .spec h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 16px; font-weight: 650; }
+  .spec dl { margin: 0; display: grid; gap: 8px; }
+  .spec dt { color: var(--muted); font-size: 12.5px; }
+  .spec dd { margin: 1px 0 0; font-size: 14px; text-wrap: pretty; }
+  @media (max-width: 979px) {
+    .spec dl { grid-template-columns: 7.5em minmax(0, 1fr); gap: 8px 12px; }
+    .spec dt { padding-top: 1px; }
+    .spec dd { margin: 0; }
+  }
+  .spec .open { align-self: flex-start; margin-top: auto; padding-top: 14px; font-size: 13.5px; font-weight: 600; }
+
+  /* How it was tested */
+  .method ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 8px; max-width: 84ch; }
+  .method li { text-wrap: pretty; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+  footer { color: var(--muted); font-size: 13px; padding-top: 4px; }
+
+  /* Tooltip */
+  .tip {
+    position: fixed; z-index: 10; left: 0; top: 0; pointer-events: none;
+    min-width: 132px; max-width: 250px; padding: 8px 10px 9px;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 7px; box-shadow: var(--shadow);
+    font-size: 12.5px; line-height: 1.4;
+  }
+  .tip-value { font-size: 17px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tip-row { display: flex; align-items: center; gap: 7px; color: var(--ink); }
+  .tip-detail { color: var(--muted); }
+  [hidden] { display: none !important; }
+
+  @media (max-width: 520px) {
+    body { padding-top: 18px; }
+    .card { padding: 14px; }
+    .lede { font-size: 15px; }
+    .answer { font-size: 15px; }
+    .chart-head { flex-wrap: wrap; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bar, .dot { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Which digit reader is best?</h1>
+    <p class="lede">Four networks, two built by each model, read exactly the same digits: the 10,000 in the MNIST test set, 400 of them redrawn as pen strokes, and 600 hand-designed digits in 24 styles.</p>
+    <p class="meta">Measured <span data-num="measured date">27 November 2026</span> in <span data-num="browser major">Chrome 153</span> · Tests designed and run by Claude</p>
+  </header>
+
+  <section class="card answer" aria-label="Short answer">
+    <p><strong>Short answer: Claude’s CNN, narrowly.</strong> It scored best on the pen-drawn digits, kept its accuracy when the digits were drawn small, and is the smallest network here. On MNIST, the neutral test, it ties with Gemini’s CNN: <span data-num="claude-cnn mnist count">9,933</span> against <span data-num="gemini-cnn mnist count">9,932</span> correct out of 10,000. Gemini’s MLP trails on every test because it never trains on real handwriting, though Gemini’s pages give you more controls to play with.</p>
+  </section>
+
+  <section class="tiles" aria-label="Verdicts">
+    <div class="card tile">
+      <p class="label">MNIST, the neutral test</p>
+      <p class="value"><span class="keys" aria-hidden="true"><span class="dotkey s3"></span><span class="dotkey s4"></span></span>A tie</p>
+      <p class="detail">Both CNNs score <span data-num="claude-cnn mnist pct">99.3%</span>: Claude’s reads <span data-num="claude-cnn mnist count">9,933</span> of the 10,000 digits, Gemini’s <span data-num="gemini-cnn mnist count">9,932</span>.</p>
+    </div>
+    <div class="card tile">
+      <p class="label">Pen-drawn digits</p>
+      <p class="value"><span class="keys" aria-hidden="true"><span class="dotkey s4"></span></span>Claude CNN</p>
+      <p class="detail"><span data-num="claude-cnn mnist400_normal pct">98.5%</span>, ahead of Claude’s MLP (<span data-num="claude mnist400_normal pct">98.0%</span>) and Gemini’s CNN (<span data-num="gemini-cnn mnist400_normal pct">97.8%</span>). This test favours Claude’s networks.</p>
+    </div>
+    <div class="card tile">
+      <p class="label">Drawn small</p>
+      <p class="value"><span class="keys" aria-hidden="true"><span class="dotkey s2"></span><span class="dotkey s4"></span></span>Claude’s pages</p>
+      <p class="detail">At a quarter size they still score <span data-num="claude mnist400_quarter pct">98.0%</span> and <span data-num="claude-cnn mnist400_quarter pct">98.5%</span>. Gemini’s CNN falls to <span data-num="gemini-cnn mnist400_quarter pct">51.0%</span>.</p>
+    </div>
+    <div class="card tile">
+      <p class="label">Smallest network</p>
+      <p class="value"><span class="keys" aria-hidden="true"><span class="dotkey s4"></span></span>Claude CNN</p>
+      <p class="detail"><span data-num="claude-cnn params int">11,274</span> weights, against <span data-num="gemini-cnn params int">26,698</span> in Gemini’s CNN and <span data-num="claude params int">52,650</span> in each MLP.</p>
+    </div>
+    <div class="card tile">
+      <p class="label">Most controls</p>
+      <p class="value"><span class="keys" aria-hidden="true"><span class="dotkey s1"></span><span class="dotkey s3"></span></span>Gemini’s pages</p>
+      <p class="detail">Temperature sliders, brush size, live re-training on your drawing, Grad-CAM and a sliding-window inspector.</p>
+    </div>
+  </section>
+
+  <section class="card" id="tests" aria-labelledby="tests-h">
+    <div class="chart-head">
+      <div>
+        <h2 id="tests-h">Accuracy on each test</h2>
+        <p class="sub">Share of the digits each network read correctly. Higher is better.</p>
+      </div>
+      <button class="toggle" type="button" aria-controls="tests-chart tests-table" data-label="accuracy">Show table</button>
+    </div>
+    <div id="tests-chart">
+      <ul class="legend" aria-label="Networks">
+        <li><span class="swatch s1"></span>Gemini MLP</li>
+        <li><span class="swatch s2"></span>Claude MLP</li>
+        <li><span class="swatch s3"></span>Gemini CNN</li>
+        <li><span class="swatch s4"></span>Claude CNN</li>
+      </ul>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="table-wrap" id="tests-table" hidden></div>
+    <p class="note">Gemini’s MLP trains on 175 synthetic digits drawn from one template per digit (plus five variants), so it has never seen real handwriting: it called <span data-num="gemini mnist400_pred_counts 1 int">111</span> of the 400 pen-drawn digits a 1, when only 39 are.</p>
+    <p class="note footnote"><b>*</b>&#8202;Not held out: Gemini’s CNN trained on digits made from these same 24 styles.</p>
+  </section>
+
+  <section class="card" id="sizes" aria-labelledby="sizes-h">
+    <div class="chart-head">
+      <div>
+        <h2 id="sizes-h">Drawing smaller</h2>
+        <p class="sub">The 400 pen-drawn digits again, drawn across about 70% (normal), 35% (half) and 18% (quarter) of each pad’s width. Each panel highlights one network; the grey lines are the other three.</p>
+      </div>
+      <button class="toggle" type="button" aria-controls="sizes-chart sizes-table" data-label="size">Show table</button>
+    </div>
+    <div id="sizes-chart">
+      <div class="panels" id="panels"></div>
+    </div>
+    <div class="table-wrap" id="sizes-table" hidden></div>
+    <p class="note"><b>Why Gemini’s pages slip:</b> they paint with a 22-pixel brush, then scale the whole picture to fit MNIST’s 20-pixel box. The smaller the drawing, the less it is shrunk, so at a quarter size the strokes come out about three times as thick as at normal size and loops fill in. Claude’s pages keep the pen’s path and redraw it at the same thickness whatever the size.</p>
+  </section>
+
+  <h2 class="section-head" id="nets-h">The four networks</h2>
+  <section class="specs" aria-labelledby="nets-h">
+    <article class="card spec">
+      <h3><span class="dotkey s1" aria-hidden="true"></span>Gemini MLP</h3>
+      <dl>
+        <dt>Network</dt><dd>Dense: 784 → 64 → 32 → 10</dd>
+        <dt>Weights</dt><dd data-num="gemini params int">52,650</dd>
+        <dt>Trained on</dt><dd>175 synthetic digits rendered from one stroke template per digit, plus five style variants</dd>
+        <dt>Where it trains</dt><dd>In your browser, every time the page loads</dd>
+        <dt>Extras</dt><dd>Temperature slider, live re-training on your drawing, brush size, pixel inspector, receptive-field maps, presets</dd>
+      </dl>
+      <a class="open" href="../index.html#gemini" target="_top" data-tab="gemini">Open Gemini MLP</a>
+    </article>
+    <article class="card spec">
+      <h3><span class="dotkey s2" aria-hidden="true"></span>Claude MLP</h3>
+      <dl>
+        <dt>Network</dt><dd>Dense: 784 → 64 → 32 → 10</dd>
+        <dt>Weights</dt><dd data-num="claude params int">52,650</dd>
+        <dt>Trained on</dt><dd>55,000 MNIST digits, half of them redrawn as pen strokes with random slant, wobble and pen size</dd>
+        <dt>Where it trains</dt><dd>Offline in NumPy; the weights are built into the page</dd>
+        <dt>Extras</dt><dd>Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles, neuron inspector, animated examples</dd>
+      </dl>
+      <a class="open" href="../index.html#claude" target="_top" data-tab="claude">Open Claude MLP</a>
+    </article>
+    <article class="card spec">
+      <h3><span class="dotkey s3" aria-hidden="true"></span>Gemini CNN</h3>
+      <dl>
+        <dt>Network</dt><dd>Convolutional: two 3×3 layers (8, then 16 filters, each pooled) → 32 → 10</dd>
+        <dt>Weights</dt><dd data-num="gemini-cnn params int">26,698</dd>
+        <dt>Trained on</dt><dd>56,000 MNIST digits with shape and thickness jitter, plus 3,840 digits made from the 24 style templates</dd>
+        <dt>Where it trains</dt><dd>Offline in NumPy; the weights are built into the page</dd>
+        <dt>Extras</dt><dd>Live 3×3 kernels and feature maps, sliding-window inspector, all 16 second-layer maps, Grad-CAM and saliency, temperature slider, live fine-tuning</dd>
+      </dl>
+      <a class="open" href="../index.html#gemini-cnn" target="_top" data-tab="gemini-cnn">Open Gemini CNN</a>
+    </article>
+    <article class="card spec">
+      <h3><span class="dotkey s4" aria-hidden="true"></span>Claude CNN</h3>
+      <dl>
+        <dt>Network</dt><dd>Convolutional: two 5×5 layers (8, then 16 filters, each pooled) → 10</dd>
+        <dt>Weights</dt><dd data-num="claude-cnn params int">11,274</dd>
+        <dt>Trained on</dt><dd>The same digits as Claude’s MLP</dd>
+        <dt>Where it trains</dt><dd>Offline in NumPy; the weights are built into the page</dd>
+        <dt>Extras</dt><dd>Live feature maps for every filter, exact per-pixel evidence maps, evidence flow through the maps, measured filter roles, each filter’s weights</dd>
+      </dl>
+      <a class="open" href="../index.html#cnn" target="_top" data-tab="cnn">Open Claude CNN</a>
+    </article>
+  </section>
+
+  <section class="card method" aria-labelledby="method-h">
+    <h2 id="method-h">How it was tested</h2>
+    <ul>
+      <li><b>MNIST.</b> The 10,000 test images go straight into each network, with no drawing involved. Gemini’s MLP trains every time its page loads, so its weights were read from the page in Chrome after training; other browsers can give slightly different weights.</li>
+      <li><b>Pen-drawn and style digits.</b> Each digit’s strokes were drawn on each page’s own pad with its default pen, snapped to the pad’s pixels as a mouse would be, and read through that page’s own preprocessing. No page was changed. Gemini’s CNN keeps its network out of reach of other scripts, so the test runner adds a small hook to that page as it serves it.</li>
+      <li><b>Drawing size.</b> The same strokes again at half and a quarter of their normal size, as if drawn small in the top-left corner of the pad.</li>
+      <li><b>Home advantages.</b> The pen-drawn digits are redrawn the way Claude’s networks were trained to expect, which favours them on that test. Gemini’s CNN trained on 3,840 digits made from the same 24 style templates as the style test, and picked its best training round partly by its score on them, so its 100% there is not a held-out result. MNIST is the neutral test.</li>
+      <li><b>Who ran it.</b> Claude designed and ran these tests and built two of the four networks. The scripts are in <a href="https://github.com/nihilisticiconoclast/neurovision/tree/main/compare/bench" target="_blank" rel="noopener"><code>compare/bench</code></a>, so anyone can re-run them.</li>
+      <li><b>The first comparison.</b> On 3 November Claude compared the two dense networks: 43.5% against 98.6% on MNIST, and 44.2% against 98.0% on the pen-drawn digits. This page repeats those tests with the two convolutional networks added and 600 style digits in place of the original 106.</li>
+    </ul>
+  </section>
+
+  <footer>Part of <a href="../index.html" target="_top">NeuroVision</a>, Gemini’s and Claude’s digit readers side by side.</footer>
+</main>
+
+<div class="tip" id="tip" aria-hidden="true" hidden>
+  <div class="tip-value" id="tip-value"></div>
+  <div class="tip-row"><span class="linekey" id="tip-key"></span><span id="tip-label"></span></div>
+  <div class="tip-detail" id="tip-detail"></div>
+</div>
+
+<!-- Benchmark results, embedded by compare/bench/build_page.py from summary.json. -->
+<script id="results" type="application/json">
+{"measured":"2026-11-27","browser":"Chrome/153.0.8010.12","n":{"mnist":10000,"mnist400":400,"styles600":600},"apps":{"gemini":{"params":52650,"mnist":0.4351,"mnist400_normal":0.4425,"mnist400_half":0.355,"mnist400_quarter":0.32,"mnist400_pred_counts":[32,111,21,34,30,9,36,55,31,41],"styles600_normal":0.84,"styles600_half":0.665,"styles600_quarter":0.47},"gemini-cnn":{"params":26698,"mnist":0.9932,"mnist400_normal":0.9775,"mnist400_half":0.9575,"mnist400_quarter":0.51,"mnist400_pred_counts":[35,37,49,44,52,35,44,34,35,35],"styles600_normal":1.0,"styles600_half":0.9933,"styles600_quarter":0.5283},"claude":{"params":52650,"mnist":0.986,"mnist400_normal":0.98,"mnist400_half":0.9775,"mnist400_quarter":0.98,"mnist400_pred_counts":[35,37,49,45,51,35,46,32,36,34],"styles600_normal":1.0,"styles600_half":0.9983,"styles600_quarter":1.0},"claude-cnn":{"params":11274,"mnist":0.9933,"mnist400_normal":0.985,"mnist400_half":0.985,"mnist400_quarter":0.985,"mnist400_pred_counts":[35,37,49,45,51,34,45,33,36,35],"styles600_normal":0.9983,"styles600_half":0.9983,"styles600_quarter":1.0}}}
+</script>
+<script>
+(() => {
+  "use strict";
+  const data = JSON.parse(document.getElementById("results").textContent);
+  if (!data.apps) return;
+
+  // Series in a fixed order (like with like: the two MLPs, then the two CNNs); colour slots follow it.
+  const SERIES = [
+    { app: "gemini", name: "Gemini MLP", cls: "s1" },
+    { app: "claude", name: "Claude MLP", cls: "s2" },
+    { app: "gemini-cnn", name: "Gemini CNN", cls: "s3" },
+    { app: "claude-cnn", name: "Claude CNN", cls: "s4" },
+  ];
+  const TESTS = [
+    { key: "mnist", title: "MNIST test set", short: "MNIST", sub: "10,000 digits, fed straight to each network", n: data.n.mnist },
+    { key: "mnist400_normal", title: "Pen-drawn digits", short: "Pen-drawn", sub: "400 of those digits redrawn as strokes on each page’s pad", n: data.n.mnist400 },
+    { key: "styles600_normal", title: "Style digits", short: "Styles", sub: "600 hand-designed digits in 24 styles, drawn the same way", n: data.n.styles600 },
+  ];
+  const SIZES = [{ key: "normal", label: "Normal" }, { key: "half", label: "Half" }, { key: "quarter", label: "Quarter" }];
+  const notHeldOut = (app, key) => app === "gemini-cnn" && key.startsWith("styles600_normal");
+
+  const NS = "http://www.w3.org/2000/svg";
+  const fmtInt = (v) => v.toLocaleString("en-GB");
+  const halfEven = (x) => { const f = Math.floor(x); return Math.abs(x - f - 0.5) < 1e-9 ? (f % 2 === 0 ? f : f + 1) : Math.round(x); };
+  const pct = (v) => (v >= 0.9995 ? "100%" : (halfEven(v * 1000) / 10).toFixed(1) + "%");
+  const count = (v, n) => fmtInt(Math.round(v * n));
+  const crisp = (v) => Math.round(v) + 0.5;
+  function svgEl(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function svgText(attrs, text, parent) { const e = svgEl("text", attrs, parent); e.textContent = text; return e; }
+  function htmlEl(tag, cls, text, parent) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  // Tooltip: enhances, never gates (every value is also labelled or in the table view).
+  const tip = document.getElementById("tip");
+  const tipValue = document.getElementById("tip-value");
+  const tipKey = document.getElementById("tip-key");
+  const tipLabel = document.getElementById("tip-label");
+  const tipDetail = document.getElementById("tip-detail");
+  function placeTip(x, y) {
+    const r = tip.getBoundingClientRect();
+    let left = x + 14, top = y + 16;
+    if (left + r.width > window.innerWidth - 8) left = Math.max(8, x - r.width - 14);
+    if (top + r.height > window.innerHeight - 8) top = Math.max(8, y - r.height - 12);
+    tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+  }
+  function hideTip() { tip.hidden = true; }
+
+  // One mark at a time shows its numbers: under the mouse, after a tap (until the next tap), or with keyboard focus.
+  let active = null;
+  function release() {
+    if (!active) return;
+    active.scope.classList.remove("hovering");
+    active.mark.classList.remove("on");
+    active = null;
+    hideTip();
+  }
+  function engage(rec, how, x, y) {
+    if (active && active !== rec) release();
+    active = rec;
+    rec.how = how;
+    rec.scope.classList.add("hovering");
+    rec.mark.classList.add("on");
+    const info = rec.info();
+    tipValue.textContent = info.value;
+    tipKey.className = "linekey " + info.cls;
+    tipLabel.textContent = info.label;
+    tipDetail.textContent = info.detail;
+    tip.hidden = false;
+    placeTip(x, y);
+  }
+  const anchor = (rec) => { const r = rec.mark.getBoundingClientRect(); return [r.right, r.top + r.height / 2]; };
+  function hook(hit, mark, scope, info) {
+    const rec = { hit, mark, scope, info, how: null };
+    hit.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") engage(rec, "pointer", e.clientX, e.clientY); });
+    hit.addEventListener("pointermove", (e) => { if (e.pointerType !== "touch" && active === rec) placeTip(e.clientX, e.clientY); });
+    hit.addEventListener("pointerleave", (e) => { if (e.pointerType !== "touch" && active === rec && rec.how === "pointer") release(); });
+    hit.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch") return;
+      e.stopPropagation();
+      engage(rec, "touch", e.clientX, e.clientY);
+    });
+    hit.addEventListener("focus", () => { if (hit.matches(":focus-visible")) engage(rec, "focus", ...anchor(rec)); });
+    hit.addEventListener("blur", () => { if (active === rec && rec.how === "focus") release(); });
+  }
+  document.addEventListener("pointerdown", () => { if (active && active.how === "touch") release(); });
+  window.addEventListener("scroll", () => {
+    if (!active) return;
+    if (active.how === "focus") placeTip(...anchor(active));
+    else release();
+  }, { passive: true });
+
+  // Chart 1: grouped horizontal bars, one group per test.
+  function renderBars() {
+    const root = document.getElementById("bars");
+    const W = Math.floor(root.clientWidth);
+    if (W < 120) return;
+    release();
+    root.textContent = "";
+    const LW = W < 520 ? 86 : 104, RW = 50;
+    const x0 = LW, x1 = W - RW;
+    const xs = (v) => x0 + (x1 - x0) * v;
+    const ROW = 26, BAR = 16, R = 4, TICKS = [0, 0.25, 0.5, 0.75, 1];
+    for (const t of TESTS) {
+      const group = htmlEl("div", "bgroup", null, root);
+      const head = htmlEl("p", "gtitle", null, group);
+      htmlEl("b", null, t.title, head);
+      htmlEl("span", null, t.sub, head);
+      const H = ROW * SERIES.length + 4;
+      const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": t.title }, group);
+      for (const v of TICKS) svgEl("line", { x1: crisp(xs(v)), x2: crisp(xs(v)), y1: 0, y2: H, class: v === 0 ? "baseline" : "gridline" }, svg);
+      SERIES.forEach((s, i) => {
+        const v = data.apps[s.app][t.key];
+        const star = notHeldOut(s.app, t.key) ? "*" : "";
+        const y = 2 + i * ROW + (ROW - BAR) / 2;
+        const xa = crisp(xs(0)) + 0.5, xe = Math.max(xa + R, xs(v));
+        const bar = svgEl("path", {
+          d: `M${xa},${y}H${xe - R}A${R},${R} 0 0 1 ${xe},${y + R}V${y + BAR - R}A${R},${R} 0 0 1 ${xe - R},${y + BAR}H${xa}Z`,
+          class: "bar " + s.cls,
+        }, svg);
+        svgText({ x: x0 - 10, y: y + BAR / 2, "text-anchor": "end", "dominant-baseline": "central", class: "rowlabel", "aria-hidden": "true" }, s.name, svg);
+        svgText({ x: xe + 6, y: y + BAR / 2, "dominant-baseline": "central", class: "value", "aria-hidden": "true" }, pct(v) + star, svg);
+        const label = `${s.name}, ${t.title}: ${pct(v)}, ${count(v, t.n)} of ${fmtInt(t.n)} correct${star ? ", not held out" : ""}`;
+        const hit = svgEl("rect", { x: 1, y: 2 + i * ROW + 1, width: W - 2, height: ROW - 2, rx: 4, class: "hit", tabindex: 0, role: "img", "aria-label": label }, svg);
+        hook(hit, bar, root, () => ({
+          value: pct(v) + star,
+          cls: s.cls,
+          label: s.name,
+          detail: `${count(v, t.n)} of ${fmtInt(t.n)} correct · ${t.title}${star ? " · not held out" : ""}`,
+        }));
+      });
+    }
+    const axis = svgEl("svg", { width: W, height: 20, viewBox: `0 0 ${W} 20`, "aria-hidden": "true" }, root);
+    for (const v of TICKS) svgText({ x: xs(v), y: 14, "text-anchor": "middle", class: "tick" }, v * 100 + "%", axis);
+  }
+
+  // Chart 2: small multiples, one panel per network, the other three in grey behind it.
+  function renderPanels() {
+    const root = document.getElementById("panels");
+    if (root.clientWidth < 120) return;
+    release();
+    root.textContent = "";
+    const holders = SERIES.map((s) => {
+      const fig = htmlEl("figure", "panel", null, root);
+      const cap = htmlEl("figcaption", null, null, fig);
+      htmlEl("span", "linekey " + s.cls, null, cap).setAttribute("aria-hidden", "true");
+      cap.appendChild(document.createTextNode(s.name));
+      return htmlEl("div", "plot", null, fig);
+    });
+    holders.forEach((holder, k) => drawPanel(holder, SERIES[k], root));
+  }
+  function drawPanel(holder, s, scope) {
+    const W = Math.floor(holder.clientWidth);
+    const compact = W < 200;
+    const PH = 116, TOP = 10, BOTTOM = 24, LEFT = compact ? 31 : 36, RIGHT = compact ? 4 : 10, INSET = compact ? 8 : 10;
+    const tick = compact ? "tick small" : "tick";
+    const H = TOP + PH + BOTTOM;
+    const xs = (i) => LEFT + INSET + (W - LEFT - RIGHT - 2 * INSET) * (i / 2);
+    const ys = (v) => TOP + PH * (1 - v);
+    const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": `${s.name}: accuracy on the pen-drawn digits at three drawing sizes` }, holder);
+    for (const v of [0, 0.5, 1]) {
+      svgEl("line", { x1: LEFT, x2: W - RIGHT, y1: crisp(ys(v)), y2: crisp(ys(v)), class: v === 0 ? "baseline" : "gridline" }, svg);
+      svgText({ x: LEFT - 7, y: ys(v), "text-anchor": "end", "dominant-baseline": "central", class: tick, "aria-hidden": "true" }, v * 100 + "%", svg);
+    }
+    SIZES.forEach((z, i) => svgText({ x: xs(i), y: H - 6, "text-anchor": i === 0 ? "start" : i === 2 ? "end" : "middle", dx: i === 0 ? -INSET : i === 2 ? INSET : 0, class: tick, "aria-hidden": "true" }, z.label, svg));
+    const valuesOf = (app) => SIZES.map((z) => data.apps[app]["mnist400_" + z.key]);
+    for (const o of SERIES) {
+      if (o === s) continue;
+      svgEl("polyline", { points: valuesOf(o.app).map((v, i) => `${xs(i)},${ys(v)}`).join(" "), class: "context" }, svg);
+    }
+    const vals = valuesOf(s.app);
+    svgEl("polyline", { points: vals.map((v, i) => `${xs(i)},${ys(v)}`).join(" "), class: "line " + s.cls }, svg);
+    const dots = vals.map((v, i) => svgEl("circle", { cx: xs(i), cy: ys(v), r: 5, class: "dot " + s.cls }, svg));
+    // Values at the start and end only, on the side of the point away from its line.
+    for (const i of [0, 2]) {
+      const v = vals[i];
+      const above = v < 0.9 && vals[1] < v;
+      svgText({
+        x: xs(i) + (i === 0 ? -4 : 4), y: ys(v) + (above ? -14 : 14),
+        "text-anchor": i === 0 ? "start" : "end", "dominant-baseline": "central", class: compact ? "value small halo" : "value halo", "aria-hidden": "true",
+      }, pct(v), svg);
+    }
+    vals.forEach((v, i) => {
+      const n = data.n.mnist400;
+      const hit = svgEl("circle", {
+        cx: xs(i), cy: ys(v), r: 13, class: "hit", tabindex: 0, role: "img",
+        "aria-label": `${s.name}, ${SIZES[i].label.toLowerCase()} size: ${pct(v)}, ${count(v, n)} of ${n} correct`,
+      }, svg);
+      hook(hit, dots[i], scope, () => ({
+        value: pct(v), cls: s.cls, label: `${s.name} · ${SIZES[i].label.toLowerCase()} size`, detail: `${count(v, n)} of ${n} pen-drawn digits correct`,
+      }));
+    });
+  }
+
+  // Table views: the same numbers without the charts.
+  function nameCell(tr, s) {
+    const td = htmlEl("td", "name", null, tr);
+    const wrap = htmlEl("span", "namecell", null, td);
+    htmlEl("span", "swatch " + s.cls, null, wrap).setAttribute("aria-hidden", "true");
+    wrap.appendChild(document.createTextNode(s.name));
+  }
+  function buildTables() {
+    const t1 = htmlEl("table", null, null, document.getElementById("tests-table"));
+    htmlEl("caption", null, "Accuracy on each test, with the number of digits read correctly", t1);
+    const h1 = htmlEl("tr", null, null, htmlEl("thead", null, null, t1));
+    htmlEl("th", null, "Network", h1).scope = "col";
+    for (const t of TESTS) htmlEl("th", null, `${t.short} (${fmtInt(t.n)})`, h1).scope = "col";
+    const b1 = htmlEl("tbody", null, null, t1);
+    for (const s of SERIES) {
+      const tr = htmlEl("tr", null, null, b1);
+      nameCell(tr, s);
+      for (const t of TESTS) {
+        const v = data.apps[s.app][t.key];
+        const td = htmlEl("td", null, pct(v), tr);
+        if (notHeldOut(s.app, t.key)) htmlEl("span", "star", "*", td);
+        htmlEl("span", "n", count(v, t.n), td);
+      }
+    }
+
+    for (const set of [{ key: "mnist400", name: "pen-drawn digits" }, { key: "styles600", name: "style digits" }]) {
+      const t2 = htmlEl("table", null, null, document.getElementById("sizes-table"));
+      htmlEl("caption", null, `Accuracy on the ${fmtInt(data.n[set.key])} ${set.name}, by drawing size`, t2);
+      const h2 = htmlEl("tr", null, null, htmlEl("thead", null, null, t2));
+      htmlEl("th", null, "Network", h2).scope = "col";
+      for (const z of SIZES) htmlEl("th", null, z.label, h2).scope = "col";
+      const b2 = htmlEl("tbody", null, null, t2);
+      for (const s of SERIES) {
+        const tr = htmlEl("tr", null, null, b2);
+        nameCell(tr, s);
+        for (const z of SIZES) {
+          const key = `${set.key}_${z.key}`, v = data.apps[s.app][key];
+          const td = htmlEl("td", null, pct(v), tr);
+          if (notHeldOut(s.app, key)) htmlEl("span", "star", "*", td);
+          htmlEl("span", "n", count(v, data.n[set.key]), td);
+        }
+      }
+    }
+  }
+
+  document.querySelectorAll(".toggle").forEach((btn) => {
+    const [chartId, tableId] = btn.getAttribute("aria-controls").split(" ");
+    btn.setAttribute("aria-label", `Show the ${btn.dataset.label} chart as a table`);
+    btn.addEventListener("click", () => {
+      const chart = document.getElementById(chartId), table = document.getElementById(tableId);
+      const toTable = table.hidden;
+      table.hidden = !toTable;
+      chart.hidden = toTable;
+      btn.textContent = toTable ? "Show chart" : "Show table";
+      btn.setAttribute("aria-label", toTable ? `Show the ${btn.dataset.label} chart` : `Show the ${btn.dataset.label} chart as a table`);
+      release();
+      if (!toTable) render();
+    });
+  });
+
+  document.querySelectorAll("a[data-tab]").forEach((a) => a.addEventListener("click", (e) => {
+    try {
+      if (window.top !== window && window.top.document.querySelector(".switch")) {
+        e.preventDefault();
+        window.top.location.hash = a.dataset.tab;
+      }
+    } catch (err) { /* opened some other way: the link itself works */ }
+  }));
+
+  let lastBars = 0, lastPanels = 0;
+  function render() {
+    const b = document.getElementById("bars").clientWidth, p = document.getElementById("panels").clientWidth;
+    if (b && b !== lastBars) { lastBars = b; renderBars(); }
+    if (p && p !== lastPanels) { lastPanels = p; renderPanels(); }
+  }
+  buildTables();
+  render();
+  let frame = 0;
+  new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(render); }).observe(document.querySelector("main"));
+})();
+</script>
+</body>
+</html>

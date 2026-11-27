@@ -1,0 +1,8 @@
+{
+  "name": "neurovision-bench",
+  "private": true,
+  "description": "Runs the four NeuroVision networks through their own pages on the same test digits.",
+  "dependencies": {
+    "puppeteer-core": "^23.0.0"
+  }
+}
