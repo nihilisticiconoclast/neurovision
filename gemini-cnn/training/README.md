@@ -15,6 +15,15 @@ The convolutional neural network behind `gemini-cnn/index.html`, written and tra
 | FC2 + Temperature Softmax | `10` | 330 | Calibrated class probabilities (`0`–`9`) |
 | **Total** | | **26,698** | Embedded as float32 base64 in `gemini-cnn/index.html` |
 
+## Results
+
+| Test set | Accuracy |
+| :--- | :--- |
+| MNIST test set (10,000 digits) | 99.32% |
+| 600 digits rendered from the 24 style templates in `claude/training/styles.py` | 100% |
+
+The style score is not a held-out result: training includes 3,840 digits rendered from the same 24 templates (with a different random seed), and `train_cnn.py` keeps the epoch with the best mix of validation accuracy (70%) and this score (30%). The MNIST test set is used only once, at the end.
+
 ## Reproduce
 
 ```bash
