@@ -10,7 +10,7 @@
 
 ## Four versions
 
-This repo holds four takes on handwritten-digit recognition, two from each model: Google Gemini's original NeuroVision (`gemini/`) and its convolutional network (`gemini-cnn/`), and Anthropic Claude's Neural Digit Reader (`claude/`) and Convolutional Digit Reader (`claude/cnn/`). Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the others. All four are single HTML files that also run on their own.
+This repo holds four takes on handwritten-digit recognition, two from each model: Google Gemini's original NeuroVision (`gemini/`) and its convolutional network (`gemini-cnn/`), and Anthropic Claude's Neural Digit Reader (`claude/`) and Convolutional Digit Reader (`claude/cnn/`). Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the others. A fifth tab, Compare (`compare/`), charts the results below and gives a verdict on which is best. All five are single HTML files that also run on their own.
 
 | | Gemini (`gemini/`) | Gemini CNN (`gemini-cnn/`) | Claude (`claude/`) | Claude CNN (`claude/cnn/`) |
 | :--- | :--- | :--- | :--- | :--- |
@@ -20,10 +20,11 @@ This repo holds four takes on handwritten-digit recognition, two from each model
 | Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`gemini-cnn/training/`](gemini-cnn/training/)); weights embedded in the page | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page | Offline in NumPy (same folder); weights embedded in the page |
 | MNIST test set (10,000 digits) | 43.5% | 99.3% | 98.6% | 99.3% |
 | 400 MNIST test digits drawn as pen strokes, through each app's own drawing pipeline | 44.2% | 97.8% | 98.0% | 98.5% |
+| The same 400 digits drawn at a quarter of the size | 32.0% | 51.0% | 98.0% | 98.5% |
 | 600 hand-designed digits in 24 other styles, through each app's own pipeline | 84.0% | 100%\* | 100% | 99.8% |
 | Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Live Conv1 3×3 kernels and feature maps, an interactive 3×3 sliding-window inspector, all 16 Conv2 maps, Grad-CAM and input-gradient saliency, temperature slider, live fine-tuning of the dense head | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples | Live feature maps for every filter, exact per-pixel evidence maps, evidence flow through the maps, measured filter roles on hover, each filter's weights in the inspector, animated examples |
 
-All four networks were scored on identical images; the pen-stroke and style digits were drawn on each page's own pad with its own default pen and pre-processing. Gemini's MLP weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, they can differ slightly between browsers. Two rows give one side a home advantage. \*Gemini CNN trained on 3,840 digits rendered from the same 24 style templates, and picked its best epoch partly by its score on them, so its 100% there is not a held-out result; the other three never saw those templates. The pen-stroke digits are re-drawn the way Claude's networks were trained to expect, which favours them on that row. The MNIST row is the neutral benchmark.
+All four networks were scored on identical images; the pen-stroke and style digits were drawn on each page's own pad with its own default pen and pre-processing. Gemini's MLP weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, they can differ slightly between browsers. Two rows give one side a home advantage. \*Gemini CNN trained on 3,840 digits rendered from the same 24 style templates, and picked its best epoch partly by its score on them, so its 100% there is not a held-out result; the other three never saw those templates. The pen-stroke digits are re-drawn the way Claude's networks were trained to expect, which favours them on that row. The MNIST row is the neutral benchmark. Gemini's pages lose accuracy on small drawings because they paint with a 22-pixel brush and then scale the picture, so a small digit's strokes come out about three times as thick; Claude's pages redraw the pen's path at a fixed thickness after scaling. The scripts that produce these numbers, and the Compare tab's charts, are in [`compare/bench/`](compare/bench/).
 
 ---
 
@@ -57,7 +58,7 @@ Displays 6 specialized structural detectors that show *how* the network decompos
 
 ## Quick Start
 
-Because each version is a single HTML file, no build step or server installation is required. The root `index.html` holds the version switcher; `gemini/index.html`, `gemini-cnn/index.html`, `claude/index.html` and `claude/cnn/index.html` also open on their own.
+Because each version is a single HTML file, no build step or server installation is required. The root `index.html` holds the version switcher; `gemini/index.html`, `gemini-cnn/index.html`, `claude/index.html`, `claude/cnn/index.html` and `compare/index.html` also open on their own.
 
 ### Option 1: Open Directly
 1. Clone this repository:
