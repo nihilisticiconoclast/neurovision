@@ -1,6 +1,6 @@
 # Neural Digit Reader: training code
 
-The network behind `claude/index.html`: a 784 → 64 → 32 → 10 fully connected network (ReLU, softmax), written and trained from scratch in NumPy on MNIST, plus the build step that embeds it in the page.
+The network behind `claude/index.html`: a 784 → 64 → 32 → 10 fully connected network (ReLU, softmax), written and trained from scratch in NumPy on MNIST, plus the build step that embeds it in the page. The convolutional network behind `claude/cnn/index.html` lives here too and shares the data and stroke pipeline; see [Convolutional network](#convolutional-network) below.
 
 ## Results
 
@@ -23,7 +23,7 @@ The network behind `claude/index.html`: a 784 → 64 → 32 → 10 fully connect
 ## Reproduce
 
 ```bash
-pip install numpy scipy scikit-image numba
+pip install numpy scipy scikit-image numba pillow
 # put the four MNIST .gz files (e.g. from github.com/fgnt/mnist) in ./mnist
 python3 prep.py ./mnist prep.npz          # ~40 s
 python3 train.py --out runs/m64x32.npz    # ~5 min on 2 CPU cores
@@ -34,3 +34,32 @@ cp out/index.html ../index.html
 ```
 
 `train.py` options: `--h1`, `--h2` (layer sizes), `--epochs`, `--mix both|redraw|orig`, `--flag` (share of 1s given a flag).
+
+## Convolutional network
+
+The network behind `claude/cnn/index.html`: two convolution layers (8 filters of 5×5, then 16 filters of 5×5×8, each with ReLU and 2×2 max pooling) and a 784 → 10 readout, 11,274 weights in all. It is written and trained from scratch in NumPy on exactly the same data mix as the dense network, and uses the same `prep.py`, `strokes.py` and `styles.py`.
+
+| Test set | Accuracy |
+| :--- | :--- |
+| MNIST test set (10,000 digits) | 99.3% |
+| The same test digits re-drawn as pen strokes through the page's pipeline | 98.7% |
+| Hand-designed digits in other styles (crossed 7s, flagged 1s, closed 4s…), 600 digits | 99.8% (one flagged 1 missed) |
+
+- `cnn_train.py` is the network itself: im2col convolutions, max pooling whose ties go to the first maximum in reading order (as in the page), backprop (checked against finite differences at start-up), AdamW with a cosine schedule, and temperature scaling. Its split, augmentation and evaluation are copied from `train.py`, so both networks see the same digits.
+- `cnn_build_page.py` re-orders filters for a tidier diagram (outputs unchanged), picks the examples, embeds the float32 weights into `cnn_page_template.html`, and writes parity fixtures. The fixtures include the evidence the page shows (pixel sensitivities and the contributions behind every wire), computed a second way with SciPy.
+- `cnn_roles.py` works out what each filter responds to, for the hover tooltips. It measures responses to 65 probe shapes drawn with the page's pen (straight strokes at 12 angles, stroke ends, corners, curves, junctions, crossings, loops, a dot), averaged over 16 sub-pixel placements. On 20,000 test digits it also records which digits fire each map hardest, how much of the map lights up, and the typical trigger (the average input patch around each firing spot, weighted by activation squared). Layer-1 filters are named by stroke angle and by which side of the stroke they fire on, found by sliding a stroke across them. Labels come from the strongest probe; 16 were corrected or reworded after checking the contact sheets by eye, listed in `OVERRIDES` with the reason. Several layer-2 filters fire on empty space framed by strokes, which no single-stroke probe can show.
+- `cnn_final_weights.npz` holds the trained weights as used in the page: `K1` (8×1×5×5), `b1`, `K2` (16×8×5×5), `b2`, `W3` (10×784, inputs ordered map, row, column), `b3`, and temperature `T`. Convolutions zero-pad by 2, so each map keeps its input's size.
+
+### Reproduce
+
+After `prep.py` (above):
+
+```bash
+python3 cnn_train.py --out runs/cnn8x16.npz                  # ~16 min on 2 CPU cores
+python3 cnn_build_page.py runs/cnn8x16.npz out/cnn/          # writes out/cnn/final_weights.npz
+python3 cnn_roles.py out/cnn/final_weights.npz out/cnn/      # measures filter roles (~40 s), writes contact sheets
+python3 cnn_build_page.py runs/cnn8x16.npz out/cnn/          # builds again, now with the tooltips
+cp out/cnn/index.html ../cnn/index.html
+```
+
+`cnn_train.py` options: `--c1`, `--c2` (filters per layer), `--epochs`, `--mix both|redraw|orig`, `--flag`.

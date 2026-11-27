@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>NeuroVision</title>
-<meta name="description" content="Handwritten-digit neural networks built by Google's Gemini (MLP and CNN) and Anthropic's Claude. Switch between them.">
+<meta name="description" content="Handwritten-digit neural networks built by Google's Gemini and Anthropic's Claude, each as a dense network and a convolutional one. Switch between them.">
 <style>
   :root {
     --bar: #f5f7fa;
@@ -63,7 +63,7 @@
   .about { flex: 1 1 260px; min-width: 0; color: var(--muted); font-size: 13px; }
   .open { color: var(--muted); font-size: 13px; white-space: nowrap; text-underline-offset: 2px; }
   .open:hover { color: var(--fg); }
-  .open .short { display: none; }
+  .open .short, .switch .short { display: none; }
   @media (max-width: 640px) {
     .bar { gap: 6px 12px; }
     .name { font-size: 13px; }
@@ -72,6 +72,17 @@
     .open { margin-left: auto; }
     .open .long { display: none; }
     .open .short { display: inline; }
+  }
+  @media (max-width: 440px) {
+    .bar { gap: 6px 10px; }
+    .switch button { padding: 0 9px; }
+    .switch .long { display: none; }
+    .switch .short { display: inline; }
+  }
+  @media (max-width: 370px) {
+    .bar { gap: 6px 8px; }
+    .name { font-size: 12px; }
+    .switch button { padding: 0 7px; }
   }
   .frames { position: relative; flex: 1 1 auto; min-height: 0; }
   .frames iframe { position: absolute; inset: 0; display: block; width: 100%; height: 100%; border: 0; background: var(--bar); }
@@ -85,6 +96,7 @@
     <button type="button" data-version="gemini" aria-pressed="true">Gemini</button>
     <button type="button" data-version="gemini-cnn" aria-pressed="false">Gemini CNN</button>
     <button type="button" data-version="claude" aria-pressed="false">Claude</button>
+    <button type="button" data-version="cnn" aria-pressed="false" aria-label="Claude CNN"><span class="long">Claude CNN</span><span class="short">CNN</span></button>
   </div>
   <span class="about" id="about"></span>
   <a class="open" id="open" href="gemini/index.html" target="_blank" rel="noopener"><span class="long">Open on its own</span><span class="short">Full page</span></a>
@@ -93,6 +105,7 @@
   <iframe id="frame-gemini" title="NeuroVision, Gemini MLP version"></iframe>
   <iframe id="frame-gemini-cnn" title="NeuroVision, Gemini CNN version" hidden></iframe>
   <iframe id="frame-claude" title="Neural Digit Reader, Claude version" hidden></iframe>
+  <iframe id="frame-cnn" title="Convolutional Digit Reader, Claude's convolutional version" hidden></iframe>
 </main>
 <script>
 (() => {
@@ -108,6 +121,10 @@
     claude: {
       src: "claude/index.html",
       about: "Built by Anthropic’s Claude. Weights trained offline on 55,000 MNIST digits; tap any digit or neuron to see the evidence behind the guess.",
+    },
+    cnn: {
+      src: "claude/cnn/index.html",
+      about: "Built by Anthropic’s Claude: a convolutional network, trained on the same digits. Small filters scan your strokes for edges, then shapes; tap any feature map to see where it fires.",
     },
   };
   const KEY = "neurovision-version";

@@ -8,24 +8,26 @@
 
 ---
 
-## Three versions
+## Four versions
 
-This repo holds three takes on handwritten-digit recognition: Google Gemini's original NeuroVision MLP in `gemini/`, Google Gemini's Convolutional Neural Network in `gemini-cnn/`, and Anthropic Claude's Neural Digit Reader in `claude/`. Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the others. All three are self-contained single HTML files that also run on their own.
+This repo holds four takes on handwritten-digit recognition, two from each model: Google Gemini's original NeuroVision (`gemini/`) and its convolutional network (`gemini-cnn/`), and Anthropic Claude's Neural Digit Reader (`claude/`) and Convolutional Digit Reader (`claude/cnn/`). Open `index.html` and use the switch at the top to flip between them; each keeps its drawing while you look at the others. All four are single HTML files that also run on their own.
 
-| | Gemini (`gemini/index.html`) | Gemini CNN (`gemini-cnn/index.html`) | Claude (`claude/index.html`) |
-| :--- | :--- | :--- | :--- |
-| Network | `784 → 64 → 32 → 10`, ReLU, softmax (52,650 params) | `1×28×28 → Conv(8×3×3) → Pool → Conv(16×3×3) → Pool → 32 → 10`, ReLU, softmax (26,698 params) | `784 → 64 → 32 → 10`, ReLU, softmax (52,650 params) |
-| Training data | 175 synthetic digits rendered from one stroke template per digit (plus five style variants), shifted and scaled | 56,000 augmented MNIST digits (affine + thickness jitter) + 3,840 multi-style hand-drawn pen strokes | 55,000 MNIST digits, half of them re-drawn as pen strokes with random slant, wobble and pen size |
-| Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`gemini-cnn/training/`](gemini-cnn/training/)); weights embedded in the page | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page |
-| MNIST test set (10,000 digits) | 43.5% | 99.32% | 98.6% |
-| Multi-style hand-drawn stroke digits (600 digits) | — | 100.0% | 100.0% |
-| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Live 8 Conv1 3×3 kernels & feature maps, interactive 3×3 sliding-window inspector, 16 Conv2 channels, exact Grad-CAM & input gradient saliency, temperature slider, live dense-head fine-tuning | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples |
+| | Gemini (`gemini/`) | Gemini CNN (`gemini-cnn/`) | Claude (`claude/`) | Claude CNN (`claude/cnn/`) |
+| :--- | :--- | :--- | :--- | :--- |
+| Network | `784 → 64 → 32 → 10`, ReLU, softmax | Two 3×3 convolution layers (8, then 16 filters, each followed by 2×2 max pooling) `→ 32 → 10`, ReLU, softmax | `784 → 64 → 32 → 10`, ReLU, softmax | Two 5×5 convolution layers (8, then 16 filters, each followed by 2×2 max pooling) `→ 10`, ReLU, softmax |
+| Weights | 52,650 | 26,698 | 52,650 | 11,274 |
+| Training data | 175 synthetic digits rendered from one stroke template per digit (plus five style variants), shifted and scaled | 56,000 MNIST digits with affine and thickness jitter, plus 3,840 digits rendered from the 24 style templates in `claude/training/styles.py` | 55,000 MNIST digits, half of them re-drawn as pen strokes with random slant, wobble and pen size | The same digits and mix as Claude's dense network |
+| Where it trains | In your browser, each time the page loads (18 epochs of SGD) | Offline in NumPy ([`gemini-cnn/training/`](gemini-cnn/training/)); weights embedded in the page | Offline in NumPy ([`claude/training/`](claude/training/)); weights embedded in the page | Offline in NumPy (same folder); weights embedded in the page |
+| MNIST test set (10,000 digits) | 43.5% | 99.3% | 98.6% | 99.3% |
+| 400 MNIST test digits drawn as pen strokes, through each app's own drawing pipeline | 44.2% | 97.8% | 98.0% | 98.5% |
+| 600 hand-designed digits in 24 other styles, through each app's own pipeline | 84.0% | 100%\* | 100% | 99.8% |
+| Extras | Temperature slider, live re-training on your drawing, brush size, 28×28 pixel inspector, receptive-field maps, presets | Live Conv1 3×3 kernels and feature maps, an interactive 3×3 sliding-window inspector, all 16 Conv2 maps, Grad-CAM and input-gradient saliency, temperature slider, live fine-tuning of the dense head | Exact per-pixel evidence maps, evidence flow through the network, measured neuron roles on hover, neuron inspector, animated examples | Live feature maps for every filter, exact per-pixel evidence maps, evidence flow through the maps, measured filter roles on hover, each filter's weights in the inspector, animated examples |
 
-Both networks were scored on identical images. Gemini's weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, its weights can differ slightly between browsers.
+All four networks were scored on identical images; the pen-stroke and style digits were drawn on each page's own pad with its own default pen and pre-processing. Gemini's MLP weights were read from its page after the at-load training in Chrome; because that training runs on canvas renderings, they can differ slightly between browsers. Two rows give one side a home advantage. \*Gemini CNN trained on 3,840 digits rendered from the same 24 style templates, and picked its best epoch partly by its score on them, so its 100% there is not a held-out result; the other three never saw those templates. The pen-stroke digits are re-drawn the way Claude's networks were trained to expect, which favours them on that row. The MNIST row is the neutral benchmark.
 
 ---
 
-## ✨ Key Features (Gemini version)
+## Key Features (Gemini version)
 
 ### 1. Interactive Digit Studio & MNIST Preprocessing
 - **Smooth Freehand Canvas**: Supports mouse and touch input with adjustable brush thickness (`12px`–`30px`), a one-click **Clear Canvas** action, a **Random** sample generator, and instant handwritten presets (`0`–`9`).
@@ -53,9 +55,9 @@ Displays 6 specialized structural detectors that show *how* the network decompos
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-Because each version is a single HTML file, no build step or server installation is required. The root `index.html` holds the version switcher; `gemini/index.html` and `claude/index.html` also open on their own.
+Because each version is a single HTML file, no build step or server installation is required. The root `index.html` holds the version switcher; `gemini/index.html`, `gemini-cnn/index.html`, `claude/index.html` and `claude/cnn/index.html` also open on their own.
 
 ### Option 1: Open Directly
 1. Clone this repository:
@@ -77,7 +79,7 @@ Then visit `http://localhost:8080` in your browser.
 
 ---
 
-## 🛠️ Architecture Overview
+## Architecture Overview
 
 | Layer | Dimensions | Activation | Role |
 | :--- | :--- | :--- | :--- |
@@ -85,6 +87,16 @@ Then visit `http://localhost:8080` in your browser.
 | **Hidden Layer 1** | `64` Neurons | $\text{ReLU}(x) = \max(0, x)$ | Primary stroke, edge, and quadrant loop extraction |
 | **Hidden Layer 2** | `32` Neurons | $\text{ReLU}(x) = \max(0, x)$ | High-level topological combinations |
 | **Output Layer** | `10` Classes (`0`–`9`) | Temperature-Scaled Softmax | Class probability distribution & logit telemetry |
+
+---
+
+## Gemini CNN
+
+- A laboratory around a small convolutional network: two 3×3 convolution layers with 8 and 16 filters, max pooling and a 32-neuron dense head (26,698 weights), trained offline in NumPy on augmented MNIST plus digits rendered from the style templates in `claude/training/styles.py`.
+- Every Conv1 kernel is shown live with its feature map, and a sliding-window inspector shows the 3×3 patch, kernel and sum behind any output cell. All 16 Conv2 maps are drawn with their Grad-CAM weight for the selected digit.
+- Grad-CAM, input-gradient saliency and gradient-times-input maps, computed by full backpropagation in the page; a softmax temperature slider; presets and a brush-size control.
+- A "Teach" panel fine-tunes the dense head on your drawing in real time while the convolution filters stay fixed, with a button to reset the weights.
+- 99.3% on the MNIST test set. Training code and steps to reproduce: [`gemini-cnn/training/`](gemini-cnn/training/).
 
 ---
 
@@ -99,6 +111,17 @@ Then visit `http://localhost:8080` in your browser.
 
 ---
 
-## 📄 License
+## Claude CNN: Convolutional Digit Reader
+
+- The same instrument as the dense page (pad, examples, answer card, inspector) with a convolutional network inside. Eight 5×5 filters look for edges, sixteen more combine those into shapes, and each digit's score weighs the sixteen 7×7 maps that result.
+- Every feature map is drawn as a tile that lights up wherever its filter fires on your drawing. Orange or blue wires show which maps push the selected digit's score up or down.
+- Hover over a map to see what its filter responds to, such as "Upright strokes", "Top of an arch" or "Pocket under a bar". The roles are measured: each filter was shown 65 probe shapes drawn with the page's own pen (strokes at 12 angles, stroke ends, corners, curves, junctions, loops) and scored on 20,000 test digits, then checked by eye. Several layer-2 filters turn out to fire on empty space framed by strokes, such as the pocket under a 5's top bar.
+- Tap any digit or map to inspect it: the filter's own weights, where it fires in your drawing, and which pixels produced its output. As on the dense page, the pixel maps add up exactly to the score, because a ReLU and max-pool network is linear while its on/off pattern and pooling winners are fixed.
+- It has a fifth of the dense network's weights (11,274 against 52,650) and scores higher: 99.3% against 98.6% on the MNIST test set, and 98.7% against 98.1% on the test digits re-drawn as pen strokes. On the 600 hand-designed digits in other styles it gets 599, missing one flagged 1; the dense network gets all 600.
+- Same stroke pipeline as the dense page, so its inputs are bit-identical to Python's too. Training code, weights and steps to reproduce: the `cnn_` files in [`claude/training/`](claude/training/).
+
+---
+
+## License
 
 Distributed under the MIT License. Feel free to fork, experiment with hidden layer dimensions, or embed the visualizer in educational machine learning projects.
