@@ -1,0 +1,2749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroVision // Gemini Convolutional Neural Network</title>
+<style>
+  :root {
+    --bg: #0b0f19;
+    --card: rgba(17, 24, 39, 0.88);
+    --card-solid: #111827;
+    --elev: #1e293b;
+    --panel: rgba(15, 23, 42, 0.88);
+    --deep: #060a14;
+    --border: rgba(255, 255, 255, 0.085);
+    --border-strong: rgba(148, 163, 184, 0.22);
+    --fg: #f8fafc;
+    --muted: #94a3b8;
+    --dim: #64748b;
+    --cyan: #06b6d4;
+    --cyan-bright: #22d3ee;
+    --violet: #8b5cf6;
+    --violet-bright: #a78bfa;
+    --emerald: #10b981;
+    --emerald-bright: #34d399;
+    --amber: #f59e0b;
+    --rose: #f43f5e;
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+    background-size: 20px 20px;
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.45;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: rgba(11, 15, 25, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(30, 41, 59, 0.9);
+  }
+  .topbar-inner {
+    max-width: 1620px;
+    margin: 0 auto;
+    padding: 11px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.22), rgba(16, 185, 129, 0.22));
+    border: 1px solid rgba(6, 182, 212, 0.45);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 6px 20px rgba(6, 182, 212, 0.14);
+    flex: none;
+  }
+  .brand-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .brand h1 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #fff;
+  }
+  .brand h1 span { color: var(--cyan-bright); }
+  .badge {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.03em;
+  }
+  .badge-cnn {
+    background: rgba(16, 185, 129, 0.14);
+    color: #6ee7b7;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+  }
+  .badge-cyan {
+    background: rgba(6, 182, 212, 0.14);
+    color: #67e8f9;
+    border: 1px solid rgba(6, 182, 212, 0.35);
+  }
+  .badge-violet {
+    background: rgba(139, 92, 246, 0.16);
+    color: #c4b5fd;
+    border: 1px solid rgba(139, 92, 246, 0.35);
+  }
+  .badge-amber {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fcd34d;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+  }
+  .badge-rose {
+    background: rgba(244, 63, 94, 0.15);
+    color: #fda4af;
+    border: 1px solid rgba(244, 63, 94, 0.35);
+  }
+  .badge-muted {
+    background: rgba(30, 41, 59, 0.85);
+    color: var(--muted);
+    border: 1px solid rgba(71, 85, 105, 0.55);
+  }
+  .brand-sub {
+    margin: 2px 0 0;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  .telemetry-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border-radius: 9px;
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(30, 41, 59, 0.95);
+    color: var(--muted);
+  }
+  .pill strong { color: #e2e8f0; font-weight: 600; }
+  .pill .val-cyan { color: var(--cyan-bright); font-weight: 600; }
+  .pill .val-emerald { color: var(--emerald-bright); font-weight: 600; }
+  .pill .val-violet { color: var(--violet-bright); font-weight: 600; }
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--emerald-bright);
+    box-shadow: 0 0 8px var(--emerald);
+  }
+
+  .btn {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 10px;
+    border: 1px solid var(--border-strong);
+    background: rgba(30, 41, 59, 0.85);
+    color: #e2e8f0;
+    padding: 7px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.14s ease, border-color 0.14s ease, transform 0.08s ease;
+  }
+  .btn:hover { background: rgba(51, 65, 85, 0.9); border-color: rgba(148, 163, 184, 0.45); }
+  .btn:active { transform: scale(0.98); }
+  .btn-rose {
+    background: rgba(244, 63, 94, 0.14);
+    border-color: rgba(244, 63, 94, 0.35);
+    color: #fda4af;
+  }
+  .btn-rose:hover { background: rgba(244, 63, 94, 0.24); border-color: rgba(244, 63, 94, 0.5); }
+  .btn-cyan {
+    background: rgba(6, 182, 212, 0.14);
+    border-color: rgba(6, 182, 212, 0.35);
+    color: #67e8f9;
+  }
+  .btn-cyan:hover { background: rgba(6, 182, 212, 0.24); border-color: rgba(6, 182, 212, 0.55); }
+  .btn-violet {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.35);
+    color: #ddd6fe;
+  }
+  .btn-violet:hover { background: rgba(139, 92, 246, 0.28); border-color: rgba(139, 92, 246, 0.6); }
+
+  /* Layout */
+  .main {
+    max-width: 1620px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 18px 20px 24px;
+    flex: 1 1 auto;
+  }
+  .workbench {
+    display: grid;
+    grid-template-columns: minmax(275px, 3fr) minmax(380px, 5.2fr) minmax(310px, 3.8fr);
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 1180px) {
+    .workbench { grid-template-columns: 1fr 1fr; }
+    .col-right { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  }
+  @media (max-width: 820px) {
+    .workbench { grid-template-columns: 1fr; }
+    .col-right { grid-column: auto; display: flex; }
+    .topbar-inner { padding: 10px 14px; }
+    .main { padding: 14px; }
+  }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #cbd5e1;
+    margin: 0;
+  }
+  .card-desc {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .mono { font-family: var(--mono); }
+
+  /* Drawing Pad */
+  .pad-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 280px;
+    aspect-ratio: 1;
+    margin: 0 auto;
+    border-radius: 13px;
+    overflow: hidden;
+    border: 2px solid rgba(51, 65, 85, 0.85);
+    background-color: #070a12;
+    background-image:
+      linear-gradient(to right, rgba(6, 182, 212, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(6, 182, 212, 0.06) 1px, transparent 1px);
+    background-size: 28px 28px;
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.7);
+  }
+  .pad-wrap canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+  #drawCanvas { cursor: crosshair; }
+  #bboxOverlayCanvas { position: absolute; inset: 0; pointer-events: none; }
+  .pad-guide {
+    position: absolute;
+    inset: 12px;
+    border: 1px dashed rgba(71, 85, 105, 0.45);
+    border-radius: 9px;
+    pointer-events: none;
+  }
+  .pad-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 16px;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    color: var(--muted);
+  }
+
+  .btn-row { display: flex; gap: 7px; }
+  .btn-row .grow { flex: 1; }
+
+  /* Range Sliders */
+  .slider-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid rgba(30, 41, 59, 0.9);
+    border-radius: 10px;
+    padding: 8px 11px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--elev);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.65);
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.65);
+    cursor: pointer;
+  }
+
+  /* Digit Grid Buttons */
+  .digit-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+  .digit-btn {
+    padding: 6px 0;
+    border-radius: 8px;
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    background: rgba(30, 41, 59, 0.85);
+    color: #e2e8f0;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .digit-btn:hover {
+    background: rgba(6, 182, 212, 0.18);
+    border-color: rgba(6, 182, 212, 0.55);
+    color: #67e8f9;
+  }
+  .digit-btn-train {
+    background: rgba(139, 92, 246, 0.14);
+    border-color: rgba(139, 92, 246, 0.35);
+    color: #ddd6fe;
+  }
+  .digit-btn-train:hover {
+    background: rgba(139, 92, 246, 0.3);
+    border-color: rgba(139, 92, 246, 0.65);
+    color: #fff;
+  }
+
+  /* 28x28 Sensor Grid */
+  .sensor-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 252px;
+    aspect-ratio: 1;
+    margin: 0 auto;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(51, 65, 85, 0.9);
+    background: var(--deep);
+  }
+  .sensor-wrap canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .toggle-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-row input { accent-color: var(--cyan); cursor: pointer; }
+  .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    text-align: center;
+    font-family: var(--mono);
+    background: var(--panel);
+    border: 1px solid rgba(30, 41, 59, 0.95);
+    border-radius: 10px;
+    padding: 7px 6px;
+  }
+  .stat-strip .lbl { font-size: 9.5px; color: var(--dim); }
+  .stat-strip .val { font-size: 11.5px; font-weight: 600; color: #e2e8f0; margin-top: 1px; }
+  .stat-strip .mid { border-inline: 1px solid rgba(30, 41, 59, 0.95); }
+
+  /* Segmented Controls */
+  .seg {
+    display: inline-flex;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(51, 65, 85, 0.75);
+    border-radius: 9px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 4px 9px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .seg button:hover { color: #fff; }
+  .seg button.active {
+    background: rgba(6, 182, 212, 0.22);
+    color: #67e8f9;
+    box-shadow: inset 0 0 0 1px rgba(6, 182, 212, 0.4);
+  }
+
+  /* Conv1 Grid (8 filters) */
+  .conv1-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  @media (max-width: 520px) {
+    .conv1-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .filter-tile {
+    min-width: 0;
+    background: var(--panel);
+    border: 1px solid rgba(30, 41, 59, 0.95);
+    border-radius: 11px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+    transition: border-color 0.14s ease, transform 0.1s ease, background 0.14s ease;
+  }
+  .filter-tile:hover {
+    border-color: rgba(6, 182, 212, 0.45);
+    background: rgba(20, 31, 52, 0.95);
+  }
+  .filter-tile.selected {
+    border-color: var(--cyan-bright);
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 4px 16px rgba(6, 182, 212, 0.18);
+    background: rgba(8, 35, 52, 0.72);
+  }
+  .ft-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10.5px;
+  }
+  .ft-id { font-weight: 700; color: #e2e8f0; }
+  .ft-peak { color: var(--cyan-bright); font-weight: 600; }
+  .ft-canvases {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: space-between;
+  }
+  .kernel-canvas {
+    width: 30px;
+    height: 30px;
+    border-radius: 5px;
+    border: 1px solid rgba(71, 85, 105, 0.8);
+    background: var(--deep);
+    image-rendering: pixelated;
+    flex: none;
+  }
+  .fmap-canvas {
+    width: 56px;
+    height: 56px;
+    border-radius: 6px;
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    background: var(--deep);
+    image-rendering: pixelated;
+    flex: 1;
+    max-width: 68px;
+    aspect-ratio: 1;
+  }
+  .ft-role {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .meter {
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--elev);
+    overflow: hidden;
+  }
+  .meter-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--cyan), var(--emerald));
+    transition: width 0.14s ease;
+  }
+
+  /* Conv1 Sliding Window Inspector */
+  .inspector-box {
+    background: rgba(9, 14, 27, 0.92);
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    border-radius: 12px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    align-items: center;
+  }
+  @media (max-width: 560px) {
+    .inspector-box { grid-template-columns: 1fr; }
+  }
+  .inspector-map-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+  #selectedConv1Canvas {
+    width: 112px;
+    height: 112px;
+    border-radius: 8px;
+    border: 1px solid rgba(6, 182, 212, 0.45);
+    background: var(--deep);
+    cursor: crosshair;
+    image-rendering: pixelated;
+  }
+  .inspector-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .matrix-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .mat3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    background: rgba(15, 23, 42, 0.95);
+    padding: 4px;
+    border-radius: 7px;
+    border: 1px solid rgba(51, 65, 85, 0.8);
+    font-family: var(--mono);
+    font-size: 9.5px;
+  }
+  .mat3 span {
+    width: 34px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .math-op {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--dim);
+  }
+  .math-eq {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #cbd5e1;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(30, 41, 59, 0.95);
+    border-radius: 8px;
+    padding: 6px 9px;
+  }
+
+  /* Conv2 Grid (16 channels) */
+  .conv2-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  @media (max-width: 520px) {
+    .conv2-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .c2-tile {
+    background: var(--panel);
+    border: 1px solid rgba(30, 41, 59, 0.95);
+    border-radius: 10px;
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+    transition: border-color 0.14s ease, background 0.14s ease;
+  }
+  .c2-tile:hover { border-color: rgba(139, 92, 246, 0.55); }
+  .c2-tile.selected {
+    border-color: var(--violet-bright);
+    box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35);
+    background: rgba(46, 26, 85, 0.38);
+  }
+  .c2-tile.pos-driver { border-color: rgba(16, 185, 129, 0.45); }
+  .c2-canvas {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    border: 1px solid rgba(51, 65, 85, 0.75);
+    background: var(--deep);
+    image-rendering: pixelated;
+    display: block;
+  }
+  .alpha-tag {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 5px;
+  }
+  .alpha-pos { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
+  .alpha-neg { background: rgba(244, 63, 94, 0.16); color: #fda4af; }
+  .alpha-neu { background: rgba(51, 65, 85, 0.5); color: var(--muted); }
+
+  /* Hero Prediction */
+  .hero {
+    display: grid;
+    grid-template-columns: 112px 1fr;
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.65));
+    border: 1px solid rgba(51, 65, 85, 0.75);
+  }
+  .hero-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid rgba(51, 65, 85, 0.7);
+    padding-right: 10px;
+  }
+  .hero-kicker {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .hero-digit {
+    font-family: var(--mono);
+    font-size: 62px;
+    font-weight: 800;
+    line-height: 1.05;
+    background: linear-gradient(180deg, #ffffff 10%, #a5f3fc 55%, #34d399 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 14px rgba(16, 185, 129, 0.42));
+  }
+  .hero-right { display: flex; flex-direction: column; gap: 8px; }
+  .hero-prob-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .hero-prob {
+    font-family: var(--mono);
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--emerald-bright);
+  }
+  .hero-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--elev);
+    overflow: hidden;
+  }
+  .hero-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--cyan), var(--emerald-bright));
+    transition: width 0.16s ease;
+  }
+  .hero-subgrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    font-family: var(--mono);
+  }
+  .hero-mini {
+    background: rgba(6, 10, 20, 0.75);
+    border: 1px solid rgba(30, 41, 59, 0.9);
+    border-radius: 8px;
+    padding: 5px 8px;
+  }
+  .hero-mini .k { display: block; font-size: 9.5px; color: var(--dim); }
+  .hero-mini .v { font-size: 11.5px; font-weight: 600; color: #67e8f9; }
+
+  /* Probability Rows */
+  .prob-list { display: flex; flex-direction: column; gap: 4px; }
+  .prob-row {
+    display: grid;
+    grid-template-columns: 22px 1fr 48px;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .prob-row:hover { background: rgba(30, 41, 59, 0.55); }
+  .prob-row.top {
+    background: rgba(16, 185, 129, 0.11);
+    border-color: rgba(16, 185, 129, 0.32);
+  }
+  .prob-row.inspected {
+    border-color: rgba(34, 211, 238, 0.75);
+    box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.25);
+  }
+  .prob-track {
+    height: 9px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(30, 41, 59, 0.95);
+    padding: 1px;
+    overflow: hidden;
+  }
+  .prob-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.75);
+    transition: width 0.14s ease;
+  }
+  .prob-row.top .prob-fill {
+    background: linear-gradient(90deg, var(--cyan), var(--emerald-bright));
+  }
+  .prob-lbl { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted); }
+  .prob-row.top .prob-lbl, .prob-row.top .prob-pct { color: #6ee7b7; font-weight: 700; }
+  .prob-pct { font-family: var(--mono); font-size: 11.5px; text-align: right; color: var(--muted); }
+
+  /* Grad-CAM / Saliency Panel */
+  .cam-stage {
+    display: grid;
+    grid-template-columns: 152px 1fr;
+    gap: 12px;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid rgba(30, 41, 59, 0.95);
+    border-radius: 12px;
+    padding: 10px;
+  }
+  @media (max-width: 460px) {
+    .cam-stage { grid-template-columns: 1fr; justify-items: center; }
+  }
+  #camCanvas {
+    width: 148px;
+    height: 148px;
+    border-radius: 10px;
+    border: 1px solid rgba(51, 65, 85, 0.85);
+    background: var(--deep);
+    display: block;
+  }
+  .cam-legend {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--muted);
+    margin-top: 5px;
+  }
+  .grad-bar {
+    height: 6px;
+    border-radius: 999px;
+    margin-top: 4px;
+    background: linear-gradient(90deg, #060a14, #06b6d4, #10b981, #f59e0b, #f43f5e);
+  }
+  .grad-bar-div {
+    background: linear-gradient(90deg, #8b5cf6, #1e293b, #06b6d4, #34d399);
+  }
+  .explain-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #cbd5e1;
+  }
+  .explain-head {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--cyan-bright);
+  }
+  .driver-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 2px;
+  }
+  .driver-pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(16, 185, 129, 0.14);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+  }
+
+  /* Live Backprop Box */
+  .train-box {
+    background: linear-gradient(180deg, rgba(76, 29, 149, 0.2), rgba(15, 23, 42, 0.92));
+    border: 1px solid rgba(139, 92, 246, 0.34);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .train-feedback {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #6ee7b7;
+  }
+  .train-feedback.show { display: flex; }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid rgba(30, 41, 59, 0.9);
+    background: rgba(11, 15, 25, 0.9);
+    padding: 10px 20px;
+    margin-top: auto;
+  }
+  .footer-inner {
+    max-width: 1620px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="#34d399"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="#a78bfa"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          <path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4" opacity="0.65"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title-row">
+          <h1>NEURO<span>VISION</span></h1>
+          <span class="badge badge-cnn">MNIST CNN</span>
+          <span class="badge badge-cyan" id="mnistAccBadge">MNIST --%</span>
+        </div>
+        <p class="brand-sub">Convolutional Neural Network Laboratory — Live Feature Maps, 3×3 Kernel Inspector &amp; Exact Grad-CAM</p>
+      </div>
+    </div>
+
+    <div class="telemetry-row">
+      <div class="pill">
+        <span class="pulse-dot"></span>
+        <span>ARCH:</span>
+        <strong>28² → C1(8×3²) → P1 → C2(16×3²) → P2 → 32 → 10</strong>
+      </div>
+      <div class="pill">
+        <span>PARAMS:</span>
+        <span class="val-emerald" id="telemetryParams">26.7K</span>
+      </div>
+      <div class="pill">
+        <span>INFERENCE:</span>
+        <span class="val-cyan" id="telemetryTime">0.00 ms</span>
+      </div>
+      <div class="pill">
+        <span>HEAD TUNING:</span>
+        <span class="val-violet" id="telemetrySteps">MNIST Pre-trained</span>
+      </div>
+      <button class="btn" id="resetWeightsBtn" title="Restore original MNIST-trained CNN weights">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        <span>Reset Weights</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <div class="workbench">
+
+    <!-- COLUMN 1: INPUT PAD & 28x28 SENSOR MATRIX -->
+    <div class="col">
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">1. Input Digit Pad</h2>
+          <span class="badge badge-muted" id="strokeStatusBadge">Draw 0–9</span>
+        </div>
+
+        <div class="pad-wrap">
+          <canvas id="drawCanvas" width="280" height="280"></canvas>
+          <canvas id="bboxOverlayCanvas" width="280" height="280"></canvas>
+          <div class="pad-guide"></div>
+          <div class="pad-hint" id="canvasHintOverlay" style="opacity:0">
+            <div style="font-weight:600;color:#cbd5e1;font-size:12.5px">Draw any digit (0–9)</div>
+            <div style="font-size:11px;margin-top:3px">20×20 box &amp; center-of-mass normalized</div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-rose grow" id="clearCanvasBtn" title="Clear canvas (Esc)">Clear</button>
+          <button class="btn" id="undoStrokeBtn" title="Undo last stroke (Ctrl+Z)">Undo</button>
+          <button class="btn btn-cyan" id="randomSampleBtn" title="Draw a random handwritten sample">Random</button>
+        </div>
+
+        <div class="slider-box">
+          <span>BRUSH</span>
+          <input id="brushSizeSlider" type="range" min="12" max="30" value="22">
+          <span class="mono" style="color:#22d3ee;width:32px;text-align:right" id="brushSizeValue">22px</span>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span class="mono" style="font-size:10.5px;color:#94a3b8;text-transform:uppercase">Handwritten Presets</span>
+            <span class="mono" style="font-size:10px;color:#22d3ee">Click again for style variant</span>
+          </div>
+          <div class="digit-grid" id="presetButtonsContainer"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">2. 28×28 Tensor &amp; Receptive Field</h2>
+          <div class="toggle-row">
+            <label><input type="checkbox" id="showGradCamOverlayToggle"> Grad-CAM</label>
+            <label><input type="checkbox" id="showPixelValuesToggle"> Values</label>
+          </div>
+        </div>
+
+        <p class="card-desc">
+          Strokes are cropped, scaled into a <span class="mono" style="color:#e2e8f0">20×20</span> box, and shifted by Center-of-Mass. Hover any cell to inspect the active <span class="mono" style="color:#22d3ee">3×3</span> Conv1 patch.
+        </p>
+
+        <div class="sensor-wrap">
+          <canvas id="mnistGridCanvas" width="280" height="280"></canvas>
+        </div>
+
+        <div class="stat-strip">
+          <div>
+            <div class="lbl">COORDINATE</div>
+            <div class="val" id="hoverCoord">(x:14, y:14)</div>
+          </div>
+          <div class="mid">
+            <div class="lbl">INTENSITY</div>
+            <div class="val" style="color:#22d3ee" id="hoverIntensity">0.00</div>
+          </div>
+          <div>
+            <div class="lbl">ACTIVE PX</div>
+            <div class="val" style="color:#34d399" id="activePixelCount">0 / 784</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- COLUMN 2: CONVOLUTIONAL PIPELINE & FEATURE MAPS -->
+    <div class="col">
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">3. Conv1: 8 Learned 3×3 Filters</h2>
+          <div class="seg" role="group" aria-label="Conv1 stage view">
+            <button type="button" class="active" data-c1-mode="conv">ReLU 28×28</button>
+            <button type="button" data-c1-mode="pool">MaxPool 14×14</button>
+          </div>
+        </div>
+
+        <p class="card-desc">
+          Each learned <span class="mono" style="color:#e2e8f0">3×3</span> kernel slides across the image (<span style="color:#22d3ee">Cyan +</span> excitatory, <span style="color:#a78bfa">Violet −</span> inhibitory). Select a filter to inspect its live sliding window.
+        </p>
+
+        <div class="conv1-grid" id="conv1Grid"></div>
+
+        <!-- Live 3x3 Sliding Window Kernel Inspector -->
+        <div class="inspector-box">
+          <div class="inspector-map-wrap">
+            <canvas id="selectedConv1Canvas" width="112" height="112" title="Hover to slide the 3x3 receptive field"></canvas>
+            <span class="mono" style="font-size:10px;color:#94a3b8" id="c1InspectorCaption">Hover map: (x:14, y:14)</span>
+          </div>
+          <div class="inspector-detail">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <div>
+                <span class="badge badge-cyan" id="c1InspBadge">CONV1 F0</span>
+                <strong style="margin-left:6px;font-size:12.5px;color:#fff" id="c1InspRole">Edge Detector</strong>
+              </div>
+              <span class="mono" style="font-size:10.5px;color:#94a3b8" id="c1InspDigits">Top MNIST: —</span>
+            </div>
+
+            <div class="matrix-row">
+              <div>
+                <div class="mono" style="font-size:9.5px;color:#64748b;margin-bottom:3px">3×3 INPUT PATCH</div>
+                <div class="mat3" id="matPatch"></div>
+              </div>
+              <span class="math-op">⊙</span>
+              <div>
+                <div class="mono" style="font-size:9.5px;color:#64748b;margin-bottom:3px">3×3 KERNEL W</div>
+                <div class="mat3" id="matKernel"></div>
+              </div>
+            </div>
+
+            <div class="math-eq" id="c1MathEq">
+              ReLU( Σ(x·w) + b ) = 0.000
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">4. Conv2: 16 Deep Feature Maps</h2>
+          <div class="seg" role="group" aria-label="Conv2 stage view">
+            <button type="button" class="active" data-c2-mode="conv">ReLU 14×14</button>
+            <button type="button" data-c2-mode="pool">MaxPool 7×7</button>
+          </div>
+        </div>
+
+        <p class="card-desc">
+          Combines all 8 pooled Conv1 channels into 16 higher-level stroke, corner, and loop detectors. Badge shows exact Grad-CAM importance <span class="mono" style="color:#6ee7b7">α</span> for class <span class="mono" style="color:#22d3ee" id="c2TargetLabel">8</span>.
+        </p>
+
+        <div class="conv2-grid" id="conv2Grid"></div>
+
+        <div class="math-eq" id="c2InspectorBar" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <span>Click or hover any Conv2 channel to inspect its spatial focus and Grad-CAM weight.</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- COLUMN 3: CLASSIFICATION, GRAD-CAM & FINE-TUNING -->
+    <div class="col col-right">
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">5. Classification &amp; Confidence</h2>
+          <span class="badge badge-cnn" id="confidenceStatusChip">High Confidence</span>
+        </div>
+
+        <div class="hero">
+          <div class="hero-left">
+            <span class="hero-kicker">CNN Guess</span>
+            <div class="hero-digit" id="predictedDigitHero">8</div>
+          </div>
+          <div class="hero-right">
+            <div class="hero-prob-row">
+              <span style="font-size:11.5px;color:#94a3b8">Softmax Probability</span>
+              <span class="hero-prob" id="predictedProbHero">99.4%</span>
+            </div>
+            <div class="hero-bar">
+              <div class="hero-bar-fill" id="predictedProbBar" style="width:99.4%"></div>
+            </div>
+            <div class="hero-subgrid">
+              <div class="hero-mini">
+                <span class="k">RAW LOGIT (z)</span>
+                <span class="v" id="predictedLogitHero">+9.40</span>
+              </div>
+              <div class="hero-mini">
+                <span class="k">RUNNER-UP</span>
+                <span class="v" style="color:#fcd34d" id="runnerUpHero">#3 (0.3%)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="mono" style="font-size:10px;color:#94a3b8;text-transform:uppercase">Click any digit to inspect its Grad-CAM</span>
+          <button class="btn" id="autoTargetBtn" style="padding:3px 8px;font-size:10.5px;display:none">Auto (Top)</button>
+        </div>
+
+        <div class="prob-list" id="probabilityBarsContainer"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">6. Grad-CAM, Saliency &amp; Fine-Tune</h2>
+          <div class="seg" role="group" aria-label="Explainability map mode">
+            <button type="button" class="active" data-cam-mode="gradcam">Grad-CAM</button>
+            <button type="button" data-cam-mode="saliency">∂z/∂x</button>
+            <button type="button" data-cam-mode="attrib">x·∂z/∂x</button>
+          </div>
+        </div>
+
+        <div class="cam-stage">
+          <div>
+            <canvas id="camCanvas" width="168" height="168"></canvas>
+            <div class="grad-bar" id="camGradBar"></div>
+            <div class="cam-legend" id="camLegend">
+              <span>Low</span><span>Spatial Evidence</span><span>Peak</span>
+            </div>
+          </div>
+          <div class="explain-box">
+            <div class="explain-head" id="explainHeadline">Grad-CAM for Digit 8:</div>
+            <div id="explainBodyText" style="line-height:1.48;color:#cbd5e1">
+              Highlighting Conv2 spatial activations weighted by exact class gradients.
+            </div>
+            <div class="driver-pills" id="driverPills"></div>
+          </div>
+        </div>
+
+        <!-- Softmax Temperature -->
+        <div style="background:var(--panel);border:1px solid rgba(30,41,59,0.95);border-radius:11px;padding:10px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px">
+            <span style="color:#cbd5e1">SOFTMAX TEMPERATURE (T)</span>
+            <span style="color:#22d3ee;font-weight:700" id="temperatureValDisplay">T = 1.00</span>
+          </div>
+          <input id="temperatureSlider" type="range" min="0.2" max="3.0" step="0.05" value="1.0">
+          <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:#64748b">
+            <span>0.2 (Sharp)</span>
+            <span id="calibratedTLabel">Calibrated</span>
+            <span>3.0 (Soft)</span>
+          </div>
+        </div>
+
+        <!-- Live Head Fine-Tuning -->
+        <div class="train-box">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#fff">Teach / Fine-Tune Dense Head (FC1 → FC2)</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px">
+              Freezes the MNIST Conv1/Conv2 filters and runs live SGD on the classification head for your handwriting:
+            </div>
+          </div>
+          <div class="digit-grid" id="trainTargetButtons"></div>
+          <div class="train-feedback" id="backpropFeedback">
+            <span id="backpropMessage">Fine-tuned head!</span>
+            <span id="backpropLossDelta">Loss: 0.001</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div>NEUROVISION CNN // Pure Vanilla JS Convolutional Forward Pass, Exact Grad-CAM &amp; Backprop Engine</div>
+    <div>Conv1(8×3×3) → Pool(2) → Conv2(16×3×3) → Pool(2) → FC(784→32→10)</div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+
+  /**************************************************************************
+   * 1. EMBEDDED MNIST-TRAINED CNN WEIGHTS & MEASURED FILTER METADATA
+   **************************************************************************/
+  const MODEL = __CNN_MODEL_JSON__;
+
+  function decodeF32(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Float32Array(bytes.buffer);
+  }
+
+  /**************************************************************************
+   * 2. PURE-JS CONVOLUTIONAL NEURAL NETWORK ENGINE
+   *    1x28x28 -> Conv1(8,3x3,pad=1)+ReLU -> MaxPool(2) [8x14x14]
+   *            -> Conv2(16,3x3,pad=1)+ReLU -> MaxPool(2) [16x7x7 = 784]
+   *            -> FC1(784->32)+ReLU -> FC2(32->10) -> Softmax(z / T)
+   **************************************************************************/
+  class DigitCNN {
+    constructor(modelPayload) {
+      this.orig = {
+        W1: decodeF32(modelPayload.weights.W1),
+        b1: decodeF32(modelPayload.weights.b1),
+        W2: decodeF32(modelPayload.weights.W2),
+        b2: decodeF32(modelPayload.weights.b2),
+        W3: decodeF32(modelPayload.weights.W3),
+        b3: decodeF32(modelPayload.weights.b3),
+        W4: decodeF32(modelPayload.weights.W4),
+        b4: decodeF32(modelPayload.weights.b4),
+      };
+      this.calibratedT = modelPayload.T || 1.0;
+
+      // Activation & argmax buffers
+      this.input = new Float32Array(784);
+      this.conv1 = new Float32Array(8 * 28 * 28);
+      this.pool1 = new Float32Array(8 * 14 * 14);
+      this.pool1Idx = new Uint8Array(8 * 14 * 14);
+      this.conv2 = new Float32Array(16 * 14 * 14);
+      this.pool2 = new Float32Array(16 * 7 * 7);
+      this.pool2Idx = new Uint8Array(16 * 7 * 7);
+      this.fc1 = new Float32Array(32);
+      this.logits = new Float32Array(10);
+      this.probs = new Float32Array(10);
+
+      // Explainability buffers
+      this.conv2Alpha = new Float32Array(16);
+      this.gradCam14 = new Float32Array(14 * 14);
+      this.saliency28 = new Float32Array(784);
+      this.attrib28 = new Float32Array(784);
+
+      this.fineTuneSteps = 0;
+      this.resetWeights();
+    }
+
+    resetWeights() {
+      this.W1 = new Float32Array(this.orig.W1);
+      this.b1 = new Float32Array(this.orig.b1);
+      this.W2 = new Float32Array(this.orig.W2);
+      this.b2 = new Float32Array(this.orig.b2);
+      this.W3 = new Float32Array(this.orig.W3);
+      this.b3 = new Float32Array(this.orig.b3);
+      this.W4 = new Float32Array(this.orig.W4);
+      this.b4 = new Float32Array(this.orig.b4);
+      this.fineTuneSteps = 0;
+    }
+
+    forward(input784, temperature = this.calibratedT) {
+      this.input.set(input784);
+
+      let energy = 0;
+      for (let i = 0; i < 784; i++) energy += input784[i];
+      if (energy < 1.2) {
+        this.conv1.fill(0);
+        this.pool1.fill(0);
+        this.conv2.fill(0);
+        this.pool2.fill(0);
+        this.fc1.fill(0);
+        this.logits.fill(0);
+        this.probs.fill(0.1);
+        this.conv2Alpha.fill(0);
+        this.gradCam14.fill(0);
+        this.saliency28.fill(0);
+        this.attrib28.fill(0);
+        return { logits: this.logits, probs: this.probs, isEmpty: true };
+      }
+
+      const W1 = this.W1, b1 = this.b1;
+      const conv1 = this.conv1;
+      // 1. Conv1: 1x28x28 -> 8x28x28 (3x3, pad=1) + ReLU
+      for (let f = 0; f < 8; f++) {
+        const wOff = f * 9;
+        const bias = b1[f];
+        const outBase = f * 784;
+        const w0 = W1[wOff],     w1 = W1[wOff + 1], w2 = W1[wOff + 2];
+        const w3 = W1[wOff + 3], w4 = W1[wOff + 4], w5 = W1[wOff + 5];
+        const w6 = W1[wOff + 6], w7 = W1[wOff + 7], w8 = W1[wOff + 8];
+        for (let y = 0; y < 28; y++) {
+          const ym1 = y - 1, yp1 = y + 1;
+          const rowOut = outBase + y * 28;
+          for (let x = 0; x < 28; x++) {
+            let s = bias;
+            if (ym1 >= 0) {
+              const r = ym1 * 28;
+              if (x > 0) s += input784[r + x - 1] * w0;
+              s += input784[r + x] * w1;
+              if (x < 27) s += input784[r + x + 1] * w2;
+            }
+            {
+              const r = y * 28;
+              if (x > 0) s += input784[r + x - 1] * w3;
+              s += input784[r + x] * w4;
+              if (x < 27) s += input784[r + x + 1] * w5;
+            }
+            if (yp1 < 28) {
+              const r = yp1 * 28;
+              if (x > 0) s += input784[r + x - 1] * w6;
+              s += input784[r + x] * w7;
+              if (x < 27) s += input784[r + x + 1] * w8;
+            }
+            conv1[rowOut + x] = s > 0 ? s : 0;
+          }
+        }
+      }
+
+      // 2. MaxPool1: 8x28x28 -> 8x14x14
+      const pool1 = this.pool1, pool1Idx = this.pool1Idx;
+      for (let f = 0; f < 8; f++) {
+        const inBase = f * 784;
+        const outBase = f * 196;
+        for (let py = 0; py < 14; py++) {
+          const y0 = py * 2;
+          const r0 = inBase + y0 * 28;
+          const r1 = r0 + 28;
+          const outRow = outBase + py * 14;
+          for (let px = 0; px < 14; px++) {
+            const x0 = px * 2;
+            const v0 = conv1[r0 + x0];
+            const v1 = conv1[r0 + x0 + 1];
+            const v2 = conv1[r1 + x0];
+            const v3 = conv1[r1 + x0 + 1];
+            let mv = v0, mi = 0;
+            if (v1 > mv) { mv = v1; mi = 1; }
+            if (v2 > mv) { mv = v2; mi = 2; }
+            if (v3 > mv) { mv = v3; mi = 3; }
+            pool1[outRow + px] = mv;
+            pool1Idx[outRow + px] = mi;
+          }
+        }
+      }
+
+      // 3. Conv2: 8x14x14 -> 16x14x14 (3x3, pad=1) + ReLU
+      const W2 = this.W2, b2 = this.b2;
+      const conv2 = this.conv2;
+      for (let f = 0; f < 16; f++) {
+        const outBase = f * 196;
+        const bias = b2[f];
+        for (let i = 0; i < 196; i++) conv2[outBase + i] = bias;
+
+        for (let c = 0; c < 8; c++) {
+          const inBase = c * 196;
+          const wOff = (f * 8 + c) * 9;
+          const w0 = W2[wOff],     w1 = W2[wOff + 1], w2 = W2[wOff + 2];
+          const w3 = W2[wOff + 3], w4 = W2[wOff + 4], w5 = W2[wOff + 5];
+          const w6 = W2[wOff + 6], w7 = W2[wOff + 7], w8 = W2[wOff + 8];
+          for (let y = 0; y < 14; y++) {
+            const ym1 = y - 1, yp1 = y + 1;
+            const outRow = outBase + y * 14;
+            for (let x = 0; x < 14; x++) {
+              let s = 0;
+              if (ym1 >= 0) {
+                const r = inBase + ym1 * 14;
+                if (x > 0) s += pool1[r + x - 1] * w0;
+                s += pool1[r + x] * w1;
+                if (x < 13) s += pool1[r + x + 1] * w2;
+              }
+              {
+                const r = inBase + y * 14;
+                if (x > 0) s += pool1[r + x - 1] * w3;
+                s += pool1[r + x] * w4;
+                if (x < 13) s += pool1[r + x + 1] * w5;
+              }
+              if (yp1 < 14) {
+                const r = inBase + yp1 * 14;
+                if (x > 0) s += pool1[r + x - 1] * w6;
+                s += pool1[r + x] * w7;
+                if (x < 13) s += pool1[r + x + 1] * w8;
+              }
+              conv2[outRow + x] += s;
+            }
+          }
+        }
+        for (let i = 0; i < 196; i++) {
+          if (conv2[outBase + i] < 0) conv2[outBase + i] = 0;
+        }
+      }
+
+      // 4. MaxPool2: 16x14x14 -> 16x7x7 (784)
+      const pool2 = this.pool2, pool2Idx = this.pool2Idx;
+      for (let f = 0; f < 16; f++) {
+        const inBase = f * 196;
+        const outBase = f * 49;
+        for (let py = 0; py < 7; py++) {
+          const r0 = inBase + (py * 2) * 14;
+          const r1 = r0 + 14;
+          const outRow = outBase + py * 7;
+          for (let px = 0; px < 7; px++) {
+            const x0 = px * 2;
+            const v0 = conv2[r0 + x0];
+            const v1 = conv2[r0 + x0 + 1];
+            const v2 = conv2[r1 + x0];
+            const v3 = conv2[r1 + x0 + 1];
+            let mv = v0, mi = 0;
+            if (v1 > mv) { mv = v1; mi = 1; }
+            if (v2 > mv) { mv = v2; mi = 2; }
+            if (v3 > mv) { mv = v3; mi = 3; }
+            pool2[outRow + px] = mv;
+            pool2Idx[outRow + px] = mi;
+          }
+        }
+      }
+
+      // 5. FC1: 784 -> 32 + ReLU
+      const W3 = this.W3, b3 = this.b3, fc1 = this.fc1;
+      for (let i = 0; i < 32; i++) {
+        let s = b3[i];
+        const off = i * 784;
+        for (let j = 0; j < 784; j++) s += W3[off + j] * pool2[j];
+        fc1[i] = s > 0 ? s : 0;
+      }
+
+      // 6. FC2: 32 -> 10 logits
+      const W4 = this.W4, b4 = this.b4, logits = this.logits;
+      let maxL = -Infinity;
+      for (let c = 0; c < 10; c++) {
+        let s = b4[c];
+        const off = c * 32;
+        for (let i = 0; i < 32; i++) s += W4[off + i] * fc1[i];
+        logits[c] = s;
+        if (s > maxL) maxL = s;
+      }
+
+      // 7. Temperature-scaled Softmax
+      const T = Math.max(0.1, temperature);
+      let expSum = 0;
+      for (let c = 0; c < 10; c++) {
+        const e = Math.exp((logits[c] - maxL) / T);
+        this.probs[c] = e;
+        expSum += e;
+      }
+      for (let c = 0; c < 10; c++) this.probs[c] /= expSum;
+
+      return { logits: this.logits, probs: this.probs, isEmpty: false };
+    }
+
+    /**
+     * Exact Grad-CAM on Conv2 + Exact Input Saliency (d(logit_c)/dx)
+     * computed via full analytical backpropagation through FC2 -> FC1 -> Pool2 -> Conv2 -> Pool1 -> Conv1.
+     */
+    computeExplainability(targetClass) {
+      const dFc1 = new Float32Array(32);
+      const w4Off = targetClass * 32;
+      for (let i = 0; i < 32; i++) {
+        dFc1[i] = this.fc1[i] > 0 ? this.W4[w4Off + i] : 0;
+      }
+
+      // dPool2 (784)
+      const dPool2 = new Float32Array(784);
+      for (let i = 0; i < 32; i++) {
+        const g = dFc1[i];
+        if (g === 0) continue;
+        const off = i * 784;
+        for (let j = 0; j < 784; j++) dPool2[j] += this.W3[off + j] * g;
+      }
+
+      // Unpool2 -> dConv2 (16x14x14)
+      const dConv2 = new Float32Array(16 * 14 * 14);
+      for (let f = 0; f < 16; f++) {
+        const pBase = f * 49;
+        const cBase = f * 196;
+        let alphaSum = 0;
+        for (let py = 0; py < 7; py++) {
+          for (let px = 0; px < 7; px++) {
+            const pIdx = pBase + py * 7 + px;
+            const mi = this.pool2Idx[pIdx];
+            const cy = py * 2 + (mi >> 1);
+            const cx = px * 2 + (mi & 1);
+            const cIdx = cBase + cy * 14 + cx;
+            if (this.conv2[cIdx] > 0) {
+              const g = dPool2[pIdx];
+              dConv2[cIdx] = g;
+              alphaSum += g;
+            }
+          }
+        }
+        this.conv2Alpha[f] = alphaSum / 196.0;
+      }
+
+      // Grad-CAM = ReLU(sum_f alpha_f * Conv2_f)
+      let camMax = 0;
+      for (let i = 0; i < 196; i++) {
+        let s = 0;
+        for (let f = 0; f < 16; f++) {
+          s += this.conv2Alpha[f] * this.conv2[f * 196 + i];
+        }
+        const v = s > 0 ? s : 0;
+        this.gradCam14[i] = v;
+        if (v > camMax) camMax = v;
+      }
+      if (camMax > 1e-9) {
+        for (let i = 0; i < 196; i++) this.gradCam14[i] /= camMax;
+      }
+
+      // Backprop dConv2 through Conv2 -> dPool1 (8x14x14)
+      const dPool1 = new Float32Array(8 * 14 * 14);
+      const W2 = this.W2;
+      for (let f = 0; f < 16; f++) {
+        const dcBase = f * 196;
+        for (let c = 0; c < 8; c++) {
+          const dpBase = c * 196;
+          const wOff = (f * 8 + c) * 9;
+          for (let y = 0; y < 14; y++) {
+            for (let x = 0; x < 14; x++) {
+              const g = dConv2[dcBase + y * 14 + x];
+              if (g === 0) continue;
+              for (let ky = -1; ky <= 1; ky++) {
+                const iy = y + ky;
+                if (iy < 0 || iy >= 14) continue;
+                const row = dpBase + iy * 14;
+                const wk = wOff + (ky + 1) * 3;
+                for (let kx = -1; kx <= 1; kx++) {
+                  const ix = x + kx;
+                  if (ix < 0 || ix >= 14) continue;
+                  dPool1[row + ix] += g * W2[wk + (kx + 1)];
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Unpool1 -> dConv1 (8x28x28)
+      const dConv1 = new Float32Array(8 * 28 * 28);
+      for (let f = 0; f < 8; f++) {
+        const pBase = f * 196;
+        const cBase = f * 784;
+        for (let py = 0; py < 14; py++) {
+          for (let px = 0; px < 14; px++) {
+            const pIdx = pBase + py * 14 + px;
+            const g = dPool1[pIdx];
+            if (g === 0) continue;
+            const mi = this.pool1Idx[pIdx];
+            const cy = py * 2 + (mi >> 1);
+            const cx = px * 2 + (mi & 1);
+            const cIdx = cBase + cy * 28 + cx;
+            if (this.conv1[cIdx] > 0) dConv1[cIdx] = g;
+          }
+        }
+      }
+
+      // Backprop dConv1 through Conv1 -> dInput (28x28)
+      this.saliency28.fill(0);
+      const W1 = this.W1;
+      for (let f = 0; f < 8; f++) {
+        const dcBase = f * 784;
+        const wOff = f * 9;
+        for (let y = 0; y < 28; y++) {
+          for (let x = 0; x < 28; x++) {
+            const g = dConv1[dcBase + y * 28 + x];
+            if (g === 0) continue;
+            for (let ky = -1; ky <= 1; ky++) {
+              const iy = y + ky;
+              if (iy < 0 || iy >= 28) continue;
+              const row = iy * 28;
+              const wk = wOff + (ky + 1) * 3;
+              for (let kx = -1; kx <= 1; kx++) {
+                const ix = x + kx;
+                if (ix < 0 || ix >= 28) continue;
+                this.saliency28[row + ix] += g * W1[wk + (kx + 1)];
+              }
+            }
+          }
+        }
+      }
+
+      for (let i = 0; i < 784; i++) {
+        this.attrib28[i] = this.saliency28[i] * this.input[i];
+      }
+    }
+
+    /**
+     * Live transfer-learning fine-tuning on Dense Head (FC1 + FC2)
+     * keeping the MNIST-trained Conv1 & Conv2 filters intact.
+     */
+    fineTuneHeadStep(input784, targetDigit, lr = 0.04) {
+      this.forward(input784, 1.0);
+      const dLogits = new Float32Array(10);
+      for (let c = 0; c < 10; c++) {
+        dLogits[c] = this.probs[c] - (c === targetDigit ? 1.0 : 0.0);
+      }
+
+      const dFc1 = new Float32Array(32);
+      for (let i = 0; i < 32; i++) {
+        if (this.fc1[i] > 0) {
+          let g = 0;
+          for (let c = 0; c < 10; c++) g += this.W4[c * 32 + i] * dLogits[c];
+          dFc1[i] = g;
+        }
+      }
+
+      // Update FC2
+      for (let c = 0; c < 10; c++) {
+        const g = dLogits[c] * lr;
+        this.b4[c] -= g;
+        const off = c * 32;
+        for (let i = 0; i < 32; i++) this.W4[off + i] -= g * this.fc1[i];
+      }
+
+      // Update FC1
+      for (let i = 0; i < 32; i++) {
+        const g = dFc1[i] * lr;
+        if (g === 0) continue;
+        this.b3[i] -= g;
+        const off = i * 784;
+        for (let j = 0; j < 784; j++) {
+          if (this.pool2[j] > 0) this.W3[off + j] -= g * this.pool2[j];
+        }
+      }
+
+      this.fineTuneSteps++;
+      return -Math.log(Math.max(1e-7, this.probs[targetDigit]));
+    }
+  }
+
+  /**************************************************************************
+   * 3. HANDWRITTEN PRESET RECIPES (WITH MULTIPLE REALISTIC STYLE VARIANTS)
+   **************************************************************************/
+  const PRESET_VARIANTS = {
+    0: [
+      [[[0.50,0.13],[0.30,0.20],[0.22,0.48],[0.28,0.78],[0.50,0.87],[0.72,0.78],[0.78,0.48],[0.70,0.20],[0.50,0.13]]],
+      [[[0.54,0.14],[0.32,0.26],[0.24,0.56],[0.36,0.84],[0.60,0.84],[0.76,0.58],[0.72,0.24],[0.54,0.14]]]
+    ],
+    1: [
+      [[[0.50,0.14],[0.50,0.86]]],
+      [[[0.34,0.28],[0.54,0.14],[0.54,0.86]], [[0.34,0.86],[0.72,0.86]]]
+    ],
+    2: [
+      [[[0.26,0.28],[0.40,0.14],[0.66,0.18],[0.74,0.34],[0.58,0.56],[0.24,0.84],[0.78,0.84]]],
+      [[[0.28,0.26],[0.48,0.14],[0.70,0.26],[0.62,0.48],[0.34,0.72],[0.24,0.85],[0.76,0.82]]]
+    ],
+    3: [
+      [[[0.26,0.22],[0.52,0.14],[0.74,0.26],[0.66,0.44],[0.44,0.49],[0.70,0.56],[0.76,0.74],[0.52,0.86],[0.24,0.78]]],
+      [[[0.24,0.16],[0.74,0.16],[0.46,0.44],[0.72,0.56],[0.72,0.78],[0.48,0.86],[0.24,0.76]]]
+    ],
+    4: [
+      [[[0.64,0.86],[0.64,0.14],[0.22,0.62],[0.80,0.62]]],
+      [[[0.32,0.15],[0.24,0.58],[0.78,0.58]], [[0.64,0.16],[0.64,0.86]]]
+    ],
+    5: [
+      [[[0.74,0.16],[0.30,0.16],[0.26,0.46],[0.56,0.44],[0.76,0.58],[0.70,0.78],[0.46,0.86],[0.24,0.78]]],
+      [[[0.30,0.16],[0.28,0.46],[0.56,0.46],[0.74,0.62],[0.66,0.82],[0.40,0.86],[0.24,0.76]], [[0.30,0.16],[0.76,0.16]]]
+    ],
+    6: [
+      [[[0.66,0.15],[0.38,0.28],[0.24,0.58],[0.32,0.82],[0.56,0.86],[0.74,0.70],[0.66,0.50],[0.42,0.48],[0.26,0.62]]],
+      [[[0.60,0.14],[0.28,0.64],[0.40,0.85],[0.66,0.82],[0.72,0.62],[0.52,0.50],[0.30,0.62]]]
+    ],
+    7: [
+      [[[0.22,0.18],[0.78,0.18],[0.40,0.86]]],
+      [[[0.22,0.18],[0.78,0.18],[0.42,0.86]], [[0.38,0.52],[0.72,0.52]]]
+    ],
+    8: [
+      [[[0.50,0.48],[0.30,0.36],[0.32,0.18],[0.50,0.14],[0.68,0.18],[0.70,0.36],[0.50,0.48],[0.26,0.64],[0.30,0.82],[0.50,0.86],[0.70,0.82],[0.74,0.64],[0.50,0.48]]],
+      [[[0.50,0.14],[0.32,0.22],[0.32,0.40],[0.50,0.48],[0.68,0.40],[0.68,0.22],[0.50,0.14]], [[0.50,0.48],[0.28,0.60],[0.28,0.80],[0.50,0.87],[0.72,0.80],[0.72,0.60],[0.50,0.48]]]
+    ],
+    9: [
+      [[[0.72,0.44],[0.50,0.52],[0.28,0.42],[0.28,0.22],[0.50,0.14],[0.72,0.24],[0.72,0.52],[0.54,0.86]]],
+      [[[0.68,0.32],[0.50,0.48],[0.28,0.38],[0.28,0.20],[0.50,0.14],[0.68,0.24],[0.66,0.86]]]
+    ]
+  };
+
+  /**************************************************************************
+   * 4. MNIST PREPROCESSING (20x20 BOX + CENTER-OF-MASS ALIGNMENT)
+   **************************************************************************/
+  const off28 = document.createElement("canvas");
+  off28.width = 28;
+  off28.height = 28;
+  const off28Ctx = off28.getContext("2d", { willReadFrequently: true });
+
+  function extractNormalized28x28(sourceCanvas) {
+    const w = sourceCanvas.width;
+    const h = sourceCanvas.height;
+    const ctx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+    const imgData = ctx.getImageData(0, 0, w, h).data;
+
+    let minX = w, minY = h, maxX = 0, maxY = 0, hasPixels = false;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (imgData[(y * w + x) * 4] > 20) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          hasPixels = true;
+        }
+      }
+    }
+
+    const tensor = new Float32Array(784);
+    if (!hasPixels) {
+      return { tensor, bbox: null, com: { x: 140, y: 140 }, activeCount: 0 };
+    }
+
+    const bw = Math.max(14, maxX - minX + 1);
+    const bh = Math.max(14, maxY - minY + 1);
+    const maxDim = Math.max(bw, bh);
+    const scale = 20.0 / maxDim;
+    const sw = bw * scale;
+    const sh = bh * scale;
+    const ox0 = (28 - sw) / 2;
+    const oy0 = (28 - sh) / 2;
+
+    off28Ctx.fillStyle = "#000000";
+    off28Ctx.fillRect(0, 0, 28, 28);
+    off28Ctx.imageSmoothingEnabled = true;
+    off28Ctx.imageSmoothingQuality = "high";
+    off28Ctx.drawImage(sourceCanvas, minX, minY, bw, bh, ox0, oy0, sw, sh);
+
+    const d1 = off28Ctx.getImageData(0, 0, 28, 28).data;
+    let mass = 0, cx = 0, cy = 0;
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        const v = d1[(y * 28 + x) * 4] / 255.0;
+        if (v > 0.04) {
+          mass += v;
+          cx += (x + 0.5) * v;
+          cy += (y + 0.5) * v;
+        }
+      }
+    }
+
+    let shiftX = 0, shiftY = 0;
+    if (mass > 0) {
+      cx /= mass;
+      cy /= mass;
+      shiftX = Math.max(-4, Math.min(4, 14.0 - cx));
+      shiftY = Math.max(-4, Math.min(4, 14.0 - cy));
+    }
+
+    off28Ctx.fillStyle = "#000000";
+    off28Ctx.fillRect(0, 0, 28, 28);
+    off28Ctx.drawImage(sourceCanvas, minX, minY, bw, bh, ox0 + shiftX, oy0 + shiftY, sw, sh);
+
+    const d2 = off28Ctx.getImageData(0, 0, 28, 28).data;
+    let activeCount = 0;
+    for (let i = 0; i < 784; i++) {
+      let v = Math.min(1.0, (d2[i * 4] / 255.0) * 1.12);
+      tensor[i] = v;
+      if (v > 0.12) activeCount++;
+    }
+
+    return {
+      tensor,
+      bbox: { minX, minY, maxX, maxY, bw, bh },
+      com: {
+        x: (minX + maxX) / 2 - shiftX * (maxDim / 20),
+        y: (minY + maxY) / 2 - shiftY * (maxDim / 20),
+      },
+      activeCount,
+    };
+  }
+
+  /**************************************************************************
+   * 5. APPLICATION STATE & DOM REFERENCES
+   **************************************************************************/
+  const cnn = new DigitCNN(MODEL);
+  let currentTensor = new Float32Array(784);
+  let currentPreproc = null;
+  let lastResult = { isEmpty: true, logits: new Float32Array(10), probs: new Float32Array(10) };
+
+  let softmaxTemp = cnn.calibratedT;
+  let brushSize = 22;
+  let strokesHistory = []; // Array of { points: [{x,y}], width }
+  let activeStroke = null;
+  let isDrawing = false;
+
+  let conv1ViewMode = "conv"; // "conv" (28x28) | "pool" (14x14)
+  let conv2ViewMode = "conv"; // "conv" (14x14) | "pool" (7x7)
+  let camMode = "gradcam";    // "gradcam" | "saliency" | "attrib"
+
+  let selectedConv1 = 0;
+  let selectedConv2 = 0;
+  let lockedClass = null;     // null = auto top prediction, or 0..9
+  let inspectCell = { x: 14, y: 14 };
+  const presetCycle = new Uint8Array(10);
+
+  const drawCanvas = document.getElementById("drawCanvas");
+  const drawCtx = drawCanvas.getContext("2d", { willReadFrequently: true });
+  const bboxOverlayCanvas = document.getElementById("bboxOverlayCanvas");
+  const bboxCtx = bboxOverlayCanvas.getContext("2d");
+  const mnistGridCanvas = document.getElementById("mnistGridCanvas");
+  const mnistGridCtx = mnistGridCanvas.getContext("2d");
+  const selectedConv1Canvas = document.getElementById("selectedConv1Canvas");
+  const selectedConv1Ctx = selectedConv1Canvas.getContext("2d");
+  const camCanvas = document.getElementById("camCanvas");
+  const camCtx = camCanvas.getContext("2d");
+
+  /**************************************************************************
+   * 6. COLORMAPS & VISUAL RENDERING HELPERS
+   **************************************************************************/
+  // Smooth heatmap RGB for [0..1] (deep obsidian -> cyan -> emerald -> amber -> rose)
+  function heatRGB(t) {
+    const v = Math.max(0, Math.min(1, t));
+    if (v < 0.25) {
+      const u = v / 0.25;
+      return [Math.round(6 * (1 - u) + 6 * u), Math.round(10 * (1 - u) + 140 * u), Math.round(20 * (1 - u) + 185 * u)];
+    } else if (v < 0.55) {
+      const u = (v - 0.25) / 0.30;
+      return [Math.round(6 * (1 - u) + 16 * u), Math.round(140 * (1 - u) + 195 * u), Math.round(185 * (1 - u) + 135 * u)];
+    } else if (v < 0.80) {
+      const u = (v - 0.55) / 0.25;
+      return [Math.round(16 * (1 - u) + 245 * u), Math.round(195 * (1 - u) + 158 * u), Math.round(135 * (1 - u) + 11 * u)];
+    } else {
+      const u = (v - 0.80) / 0.20;
+      return [Math.round(245 * (1 - u) + 244 * u), Math.round(158 * (1 - u) + 63 * u), Math.round(11 * (1 - u) + 94 * u)];
+    }
+  }
+
+  function renderMatrixToCanvas(canvas, data, offset, size, maxVal, palette = "cyan") {
+    const ctx = canvas.getContext("2d");
+    const cw = canvas.width, ch = canvas.height;
+    const cellW = cw / size, cellH = ch / size;
+    ctx.fillStyle = "#060a14";
+    ctx.fillRect(0, 0, cw, ch);
+
+    const denom = maxVal > 1e-6 ? maxVal : 1;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const v = Math.min(1, data[offset + y * size + x] / denom);
+        if (v < 0.02) continue;
+        if (palette === "cyan") {
+          const r = Math.round(v * 50);
+          const g = Math.round(150 * v + 95 * v * v);
+          const b = Math.round(180 * v + 75 * v * v);
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+        } else {
+          // Violet-to-emerald for Conv2
+          const r = Math.round(110 * v + 45 * v * v);
+          const g = Math.round(70 * v + 155 * v * v);
+          const b = Math.round(220 * v + 35 * v * v);
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+        }
+        ctx.fillRect(x * cellW, y * cellH, Math.ceil(cellW), Math.ceil(cellH));
+      }
+    }
+  }
+
+  function renderKernel3x3(canvas, W1, filterIdx) {
+    const ctx = canvas.getContext("2d");
+    const cw = canvas.width, ch = canvas.height;
+    const s = cw / 3;
+    const off = filterIdx * 9;
+    let maxAbs = 0.05;
+    for (let i = 0; i < 9; i++) {
+      const a = Math.abs(W1[off + i]);
+      if (a > maxAbs) maxAbs = a;
+    }
+    ctx.fillStyle = "#060a14";
+    ctx.fillRect(0, 0, cw, ch);
+    for (let ky = 0; ky < 3; ky++) {
+      for (let kx = 0; kx < 3; kx++) {
+        const w = W1[off + ky * 3 + kx] / maxAbs;
+        const mag = Math.min(1, Math.abs(w));
+        if (w >= 0) {
+          ctx.fillStyle = `rgba(34, 211, 238, ${0.15 + 0.85 * mag})`;
+        } else {
+          ctx.fillStyle = `rgba(167, 139, 250, ${0.15 + 0.85 * mag})`;
+        }
+        ctx.fillRect(kx * s + 0.5, ky * s + 0.5, s - 1, s - 1);
+      }
+    }
+  }
+
+  function sampleBilinear14(map14, x28, y28) {
+    const fx = (x28 + 0.5) * 0.5 - 0.5;
+    const fy = (y28 + 0.5) * 0.5 - 0.5;
+    const x0 = Math.max(0, Math.min(13, Math.floor(fx)));
+    const y0 = Math.max(0, Math.min(13, Math.floor(fy)));
+    const x1 = Math.min(13, x0 + 1);
+    const y1 = Math.min(13, y0 + 1);
+    const tx = Math.max(0, Math.min(1, fx - x0));
+    const ty = Math.max(0, Math.min(1, fy - y0));
+    const v00 = map14[y0 * 14 + x0];
+    const v10 = map14[y0 * 14 + x1];
+    const v01 = map14[y1 * 14 + x0];
+    const v11 = map14[y1 * 14 + x1];
+    return (v00 * (1 - tx) + v10 * tx) * (1 - ty) + (v01 * (1 - tx) + v11 * tx) * ty;
+  }
+
+  /**************************************************************************
+   * 7. UI INITIALIZATION
+   **************************************************************************/
+  function initUI() {
+    document.getElementById("mnistAccBadge").textContent = `MNIST ${MODEL.testMnistAcc.toFixed(1)}%`;
+    document.getElementById("telemetryParams").textContent = `${(MODEL.totalParams / 1000).toFixed(1)}K`;
+
+    const tempSlider = document.getElementById("temperatureSlider");
+    tempSlider.value = cnn.calibratedT.toFixed(2);
+    document.getElementById("temperatureValDisplay").textContent = `T = ${cnn.calibratedT.toFixed(2)}`;
+    document.getElementById("calibratedTLabel").textContent = `${cnn.calibratedT.toFixed(2)} (Calibrated)`;
+
+    // 1. Preset digit buttons
+    const presetContainer = document.getElementById("presetButtonsContainer");
+    for (let d = 0; d <= 9; d++) {
+      const btn = document.createElement("button");
+      btn.className = "digit-btn";
+      btn.textContent = d;
+      btn.title = `Load handwritten preset ${d} (click again for alternate style)`;
+      btn.addEventListener("click", () => loadPresetDigit(d, false));
+      presetContainer.appendChild(btn);
+    }
+
+    // 2. Conv1 8 filter tiles
+    const c1Grid = document.getElementById("conv1Grid");
+    for (let f = 0; f < 8; f++) {
+      const role = MODEL.conv1Roles[f]?.role || `Filter ${f}`;
+      const tile = document.createElement("div");
+      tile.className = "filter-tile" + (f === selectedConv1 ? " selected" : "");
+      tile.id = `c1Tile_${f}`;
+      tile.innerHTML = `
+        <div class="ft-head">
+          <span class="ft-id">F${f}</span>
+          <span class="ft-peak" id="c1Peak_${f}">0.00</span>
+        </div>
+        <div class="ft-canvases">
+          <canvas class="kernel-canvas" id="c1Kernel_${f}" width="30" height="30" title="Learned 3x3 kernel F${f}"></canvas>
+          <canvas class="fmap-canvas" id="c1Map_${f}" width="56" height="56"></canvas>
+        </div>
+        <div class="ft-role" title="${role}">${role}</div>
+        <div class="meter"><div class="meter-fill" id="c1Bar_${f}" style="width:0%"></div></div>
+      `;
+      tile.addEventListener("click", () => {
+        selectedConv1 = f;
+        updateConv1Selection();
+        renderConv1Inspector();
+      });
+      c1Grid.appendChild(tile);
+      renderKernel3x3(document.getElementById(`c1Kernel_${f}`), cnn.W1, f);
+    }
+
+    // 3. Conv2 16 channel tiles
+    const c2Grid = document.getElementById("conv2Grid");
+    for (let f = 0; f < 16; f++) {
+      const info = MODEL.conv2Roles[f] || { zone: "Feature", top_digits: [] };
+      const tile = document.createElement("div");
+      tile.className = "c2-tile" + (f === selectedConv2 ? " selected" : "");
+      tile.id = `c2Tile_${f}`;
+      tile.innerHTML = `
+        <div class="ft-head">
+          <span class="ft-id">C${f}</span>
+          <span class="alpha-tag alpha-neu" id="c2Alpha_${f}">α 0.00</span>
+        </div>
+        <canvas class="c2-canvas" id="c2Map_${f}" width="56" height="56"></canvas>
+        <div class="ft-role" title="${info.zone} · MNIST digits: ${info.top_digits.join(", ")}">${info.zone} · [${info.top_digits.slice(0,2).join(",")}]</div>
+      `;
+      tile.addEventListener("click", () => {
+        selectedConv2 = f;
+        updateConv2Selection();
+        renderConv2InspectorBar();
+      });
+      tile.addEventListener("mouseenter", () => {
+        selectedConv2 = f;
+        updateConv2Selection();
+        renderConv2InspectorBar();
+      });
+      c2Grid.appendChild(tile);
+    }
+
+    // 4. Probability bars (clickable to inspect any digit's Grad-CAM!)
+    const probContainer = document.getElementById("probabilityBarsContainer");
+    for (let d = 0; d <= 9; d++) {
+      const row = document.createElement("div");
+      row.className = "prob-row";
+      row.id = `probRow_${d}`;
+      row.title = `Click to inspect Grad-CAM & Saliency for Digit ${d}`;
+      row.innerHTML = `
+        <div class="prob-lbl" id="probLabel_${d}">${d}</div>
+        <div class="prob-track"><div class="prob-fill" id="probFill_${d}" style="width:0%"></div></div>
+        <div class="prob-pct" id="probText_${d}">0.0%</div>
+      `;
+      row.addEventListener("click", () => {
+        lockedClass = (lockedClass === d) ? null : d;
+        refreshExplainabilityAndBars();
+      });
+      probContainer.appendChild(row);
+    }
+
+    // 5. Fine-tune target buttons (0-9)
+    const trainContainer = document.getElementById("trainTargetButtons");
+    for (let d = 0; d <= 9; d++) {
+      const btn = document.createElement("button");
+      btn.className = "digit-btn digit-btn-train";
+      btn.textContent = d;
+      btn.title = `Fine-tune CNN head that this drawing is Digit ${d}`;
+      btn.addEventListener("click", () => triggerFineTune(d));
+      trainContainer.appendChild(btn);
+    }
+
+    // 6. Bind segmented mode controls
+    document.querySelectorAll("[data-c1-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        conv1ViewMode = btn.dataset.c1Mode;
+        document.querySelectorAll("[data-c1-mode]").forEach((b) => b.classList.toggle("active", b === btn));
+        renderConv1Maps();
+      });
+    });
+
+    document.querySelectorAll("[data-c2-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        conv2ViewMode = btn.dataset.c2Mode;
+        document.querySelectorAll("[data-c2-mode]").forEach((b) => b.classList.toggle("active", b === btn));
+        renderConv2Maps();
+      });
+    });
+
+    document.querySelectorAll("[data-cam-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        camMode = btn.dataset.camMode;
+        document.querySelectorAll("[data-cam-mode]").forEach((b) => b.classList.toggle("active", b === btn));
+        renderExplainabilityPanel();
+      });
+    });
+
+    // 7. Action buttons & sliders
+    document.getElementById("clearCanvasBtn").addEventListener("click", () => clearDrawing(true));
+    document.getElementById("undoStrokeBtn").addEventListener("click", undoLastStroke);
+    document.getElementById("randomSampleBtn").addEventListener("click", () => {
+      loadPresetDigit(Math.floor(Math.random() * 10), true);
+    });
+    document.getElementById("autoTargetBtn").addEventListener("click", () => {
+      lockedClass = null;
+      refreshExplainabilityAndBars();
+    });
+
+    document.getElementById("brushSizeSlider").addEventListener("input", (e) => {
+      brushSize = parseInt(e.target.value, 10);
+      document.getElementById("brushSizeValue").textContent = `${brushSize}px`;
+    });
+
+    document.getElementById("showPixelValuesToggle").addEventListener("change", () => render28x28Inspector());
+    document.getElementById("showGradCamOverlayToggle").addEventListener("change", () => render28x28Inspector());
+
+    tempSlider.addEventListener("input", (e) => {
+      softmaxTemp = parseFloat(e.target.value);
+      document.getElementById("temperatureValDisplay").textContent = `T = ${softmaxTemp.toFixed(2)}`;
+      runInferencePipeline();
+    });
+
+    document.getElementById("resetWeightsBtn").addEventListener("click", () => {
+      cnn.resetWeights();
+      softmaxTemp = cnn.calibratedT;
+      tempSlider.value = softmaxTemp.toFixed(2);
+      document.getElementById("temperatureValDisplay").textContent = `T = ${softmaxTemp.toFixed(2)}`;
+      document.getElementById("telemetrySteps").textContent = "MNIST Pre-trained";
+      document.getElementById("backpropFeedback").classList.remove("show");
+      runInferencePipeline();
+    });
+
+    // 8. Hover interactions on 28x28 grid & enlarged Conv1 map (synced 3x3 sliding window!)
+    const handleCellHover = (canvas, e) => {
+      const rect = canvas.getBoundingClientRect();
+      const gx = Math.min(27, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * 28)));
+      const gy = Math.min(27, Math.max(0, Math.floor(((e.clientY - rect.top) / rect.height) * 28)));
+      inspectCell = { x: gx, y: gy };
+      document.getElementById("hoverCoord").textContent = `(x:${gx}, y:${gy})`;
+      document.getElementById("hoverIntensity").textContent = (currentTensor[gy * 28 + gx] || 0).toFixed(2);
+      render28x28Inspector(true);
+      renderConv1Inspector();
+    };
+
+    mnistGridCanvas.addEventListener("mousemove", (e) => handleCellHover(mnistGridCanvas, e));
+    mnistGridCanvas.addEventListener("mouseleave", () => render28x28Inspector(false));
+    selectedConv1Canvas.addEventListener("mousemove", (e) => handleCellHover(selectedConv1Canvas, e));
+
+    // Keyboard shortcuts
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") clearDrawing(true);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        undoLastStroke();
+      }
+    });
+
+    setupDrawingListeners();
+    redrawStrokesToCanvas();
+  }
+
+  /**************************************************************************
+   * 8. DRAWING ENGINE (POINTER EVENTS + UNDO + PRESETS)
+   **************************************************************************/
+  function redrawStrokesToCanvas() {
+    drawCtx.fillStyle = "#000000";
+    drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+    drawCtx.strokeStyle = "#ffffff";
+    drawCtx.fillStyle = "#ffffff";
+    drawCtx.lineCap = "round";
+    drawCtx.lineJoin = "round";
+
+    for (const st of strokesHistory) {
+      if (!st.points.length) continue;
+      if (st.points.length === 1) {
+        drawCtx.beginPath();
+        drawCtx.arc(st.points[0].x, st.points[0].y, st.width / 2, 0, Math.PI * 2);
+        drawCtx.fill();
+      } else {
+        drawCtx.lineWidth = st.width;
+        drawCtx.beginPath();
+        drawCtx.moveTo(st.points[0].x, st.points[0].y);
+        for (let i = 1; i < st.points.length; i++) {
+          drawCtx.lineTo(st.points[i].x, st.points[i].y);
+        }
+        drawCtx.stroke();
+      }
+    }
+  }
+
+  function setupDrawingListeners() {
+    const getPos = (e) => {
+      const rect = drawCanvas.getBoundingClientRect();
+      return {
+        x: ((e.clientX - rect.left) / rect.width) * drawCanvas.width,
+        y: ((e.clientY - rect.top) / rect.height) * drawCanvas.height,
+      };
+    };
+
+    drawCanvas.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      drawCanvas.setPointerCapture(e.pointerId);
+      isDrawing = true;
+      const pt = getPos(e);
+      activeStroke = { points: [pt], width: brushSize };
+      strokesHistory.push(activeStroke);
+
+      document.getElementById("canvasHintOverlay").style.opacity = "0";
+      const badge = document.getElementById("strokeStatusBadge");
+      badge.textContent = "Live CNN...";
+      badge.className = "badge badge-cyan";
+
+      drawCtx.fillStyle = "#ffffff";
+      drawCtx.beginPath();
+      drawCtx.arc(pt.x, pt.y, brushSize / 2, 0, Math.PI * 2);
+      drawCtx.fill();
+      runInferencePipeline();
+    });
+
+    drawCanvas.addEventListener("pointermove", (e) => {
+      if (!isDrawing || !activeStroke) return;
+      e.preventDefault();
+      const pt = getPos(e);
+      const prev = activeStroke.points[activeStroke.points.length - 1];
+      activeStroke.points.push(pt);
+
+      drawCtx.strokeStyle = "#ffffff";
+      drawCtx.lineCap = "round";
+      drawCtx.lineJoin = "round";
+      drawCtx.lineWidth = activeStroke.width;
+      drawCtx.beginPath();
+      drawCtx.moveTo(prev.x, prev.y);
+      drawCtx.lineTo(pt.x, pt.y);
+      drawCtx.stroke();
+
+      runInferencePipeline();
+    });
+
+    const endStroke = () => {
+      if (!isDrawing) return;
+      isDrawing = false;
+      activeStroke = null;
+      const badge = document.getElementById("strokeStatusBadge");
+      badge.textContent = "Ready";
+      badge.className = "badge badge-cnn";
+      runInferencePipeline();
+    };
+    drawCanvas.addEventListener("pointerup", endStroke);
+    drawCanvas.addEventListener("pointercancel", endStroke);
+  }
+
+  function clearDrawing(showHint = true) {
+    strokesHistory = [];
+    activeStroke = null;
+    redrawStrokesToCanvas();
+    bboxCtx.clearRect(0, 0, bboxOverlayCanvas.width, bboxOverlayCanvas.height);
+    document.getElementById("canvasHintOverlay").style.opacity = showHint ? "1" : "0";
+    const badge = document.getElementById("strokeStatusBadge");
+    badge.textContent = "Canvas Empty";
+    badge.className = "badge badge-muted";
+    document.getElementById("backpropFeedback").classList.remove("show");
+    lockedClass = null;
+    runInferencePipeline();
+  }
+
+  function undoLastStroke() {
+    if (!strokesHistory.length) return;
+    strokesHistory.pop();
+    redrawStrokesToCanvas();
+    if (!strokesHistory.length) {
+      clearDrawing(true);
+    } else {
+      runInferencePipeline();
+    }
+  }
+
+  function loadPresetDigit(digit, randomJitter = false) {
+    strokesHistory = [];
+    const variants = PRESET_VARIANTS[digit];
+    const vIdx = presetCycle[digit] % variants.length;
+    presetCycle[digit] = (vIdx + 1) % variants.length;
+    const strokes = variants[vIdx];
+
+    const jx = randomJitter ? (Math.random() - 0.5) * 20 : (Math.random() - 0.5) * 6;
+    const jy = randomJitter ? (Math.random() - 0.5) * 20 : (Math.random() - 0.5) * 6;
+    const sc = randomJitter ? 0.88 + Math.random() * 0.2 : 1.0;
+
+    for (const path of strokes) {
+      const pts = path.map(([nx, ny]) => ({
+        x: ((nx - 0.5) * sc + 0.5) * drawCanvas.width + jx,
+        y: ((ny - 0.5) * sc + 0.5) * drawCanvas.height + jy,
+      }));
+      strokesHistory.push({ points: pts, width: brushSize });
+    }
+    redrawStrokesToCanvas();
+    document.getElementById("canvasHintOverlay").style.opacity = "0";
+    const badge = document.getElementById("strokeStatusBadge");
+    badge.textContent = `Preset #${digit}${vIdx > 0 ? " (Alt)" : ""}`;
+    badge.className = "badge badge-cyan";
+    lockedClass = null;
+    runInferencePipeline();
+  }
+
+  /**************************************************************************
+   * 9. LIVE INFERENCE & VISUALIZATION PIPELINE
+   **************************************************************************/
+  function getTopDigit() {
+    let top = 0, best = -1;
+    for (let d = 0; d < 10; d++) {
+      if (cnn.probs[d] > best) { best = cnn.probs[d]; top = d; }
+    }
+    return top;
+  }
+
+  function getInspectedClass() {
+    return lockedClass !== null ? lockedClass : getTopDigit();
+  }
+
+  function runInferencePipeline() {
+    const t0 = performance.now();
+    currentPreproc = extractNormalized28x28(drawCanvas);
+    currentTensor = currentPreproc.tensor;
+    lastResult = cnn.forward(currentTensor, softmaxTemp);
+
+    const inspected = getInspectedClass();
+    if (!lastResult.isEmpty) {
+      cnn.computeExplainability(inspected);
+    }
+    const t1 = performance.now();
+
+    document.getElementById("telemetryTime").textContent = `${Math.max(0.08, t1 - t0).toFixed(2)} ms`;
+    document.getElementById("activePixelCount").textContent = `${currentPreproc.activeCount} / 784`;
+
+    renderBoundingBoxOverlay(currentPreproc);
+    render28x28Inspector(false);
+    renderConv1Maps();
+    renderConv1Inspector();
+    renderConv2Maps();
+    renderConv2InspectorBar();
+    updatePredictionUI();
+    renderExplainabilityPanel();
+  }
+
+  function refreshExplainabilityAndBars() {
+    if (!lastResult.isEmpty) {
+      cnn.computeExplainability(getInspectedClass());
+    }
+    render28x28Inspector(false);
+    renderConv2Maps();
+    renderConv2InspectorBar();
+    updatePredictionUI();
+    renderExplainabilityPanel();
+  }
+
+  function renderBoundingBoxOverlay(preproc) {
+    bboxCtx.clearRect(0, 0, bboxOverlayCanvas.width, bboxOverlayCanvas.height);
+    if (!preproc || !preproc.bbox) return;
+    const { minX, minY, maxX, maxY } = preproc.bbox;
+    const pad = 6;
+    const bx = Math.max(2, minX - pad);
+    const by = Math.max(2, minY - pad);
+    const bw = Math.min(276 - bx, (maxX - minX) + pad * 2);
+    const bh = Math.min(276 - by, (maxY - minY) + pad * 2);
+
+    bboxCtx.strokeStyle = "rgba(6, 182, 212, 0.6)";
+    bboxCtx.lineWidth = 1.5;
+    bboxCtx.setLineDash([5, 4]);
+    bboxCtx.strokeRect(bx, by, bw, bh);
+    bboxCtx.setLineDash([]);
+
+    const cl = 8;
+    bboxCtx.strokeStyle = "#22d3ee";
+    bboxCtx.lineWidth = 2;
+    bboxCtx.beginPath();
+    bboxCtx.moveTo(bx, by + cl); bboxCtx.lineTo(bx, by); bboxCtx.lineTo(bx + cl, by);
+    bboxCtx.moveTo(bx + bw - cl, by); bboxCtx.lineTo(bx + bw, by); bboxCtx.lineTo(bx + bw, by + cl);
+    bboxCtx.moveTo(bx, by + bh - cl); bboxCtx.lineTo(bx, by + bh); bboxCtx.lineTo(bx + cl, by + bh);
+    bboxCtx.moveTo(bx + bw - cl, by + bh); bboxCtx.lineTo(bx + bw, by + bh); bboxCtx.lineTo(bx + bw, by + bh - cl);
+    bboxCtx.stroke();
+
+    const cx = preproc.com.x, cy = preproc.com.y;
+    bboxCtx.strokeStyle = "rgba(52, 211, 153, 0.9)";
+    bboxCtx.lineWidth = 1.5;
+    bboxCtx.beginPath();
+    bboxCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+    bboxCtx.moveTo(cx - 8, cy); bboxCtx.lineTo(cx + 8, cy);
+    bboxCtx.moveTo(cx, cy - 8); bboxCtx.lineTo(cx, cy + 8);
+    bboxCtx.stroke();
+  }
+
+  function render28x28Inspector(showPatchBox = false) {
+    const w = mnistGridCanvas.width, h = mnistGridCanvas.height;
+    const cell = w / 28;
+    const showNums = document.getElementById("showPixelValuesToggle").checked;
+    const showCam = document.getElementById("showGradCamOverlayToggle").checked && !lastResult.isEmpty;
+
+    mnistGridCtx.fillStyle = "#060a14";
+    mnistGridCtx.fillRect(0, 0, w, h);
+
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        const v = currentTensor[y * 28 + x];
+        let r = 11, g = 17, b = 32;
+        if (v > 0.02) {
+          r = Math.round(v * 220);
+          g = Math.round(v * 245);
+          b = Math.round(Math.min(255, v * 255 + 25));
+        }
+        if (showCam) {
+          const cam = sampleBilinear14(cnn.gradCam14, x, y);
+          if (cam > 0.08) {
+            const [hr, hg, hb] = heatRGB(cam);
+            const alpha = Math.min(0.75, cam * 0.85);
+            r = Math.round(r * (1 - alpha) + hr * alpha);
+            g = Math.round(g * (1 - alpha) + hg * alpha);
+            b = Math.round(b * (1 - alpha) + hb * alpha);
+          }
+        }
+        mnistGridCtx.fillStyle = `rgb(${r},${g},${b})`;
+        mnistGridCtx.fillRect(x * cell + 0.5, y * cell + 0.5, cell - 1, cell - 1);
+
+        if (showNums && v > 0.14) {
+          mnistGridCtx.fillStyle = v > 0.55 ? "#020617" : "#38bdf8";
+          mnistGridCtx.font = '600 6.5px ui-monospace, monospace';
+          mnistGridCtx.textAlign = "center";
+          mnistGridCtx.textBaseline = "middle";
+          mnistGridCtx.fillText(v >= 0.95 ? "1" : "." + Math.floor(v * 9), x * cell + cell / 2, y * cell + cell / 2);
+        }
+      }
+    }
+
+    // Inner 20x20 MNIST bounding box
+    mnistGridCtx.strokeStyle = "rgba(139, 92, 246, 0.35)";
+    mnistGridCtx.lineWidth = 1;
+    mnistGridCtx.strokeRect(4 * cell, 4 * cell, 20 * cell, 20 * cell);
+
+    // 3x3 receptive field highlight around inspectCell
+    if (showPatchBox) {
+      const px = Math.max(0, inspectCell.x - 1);
+      const py = Math.max(0, inspectCell.y - 1);
+      const pw = Math.min(28, inspectCell.x + 2) - px;
+      const ph = Math.min(28, inspectCell.y + 2) - py;
+      mnistGridCtx.strokeStyle = "#f59e0b";
+      mnistGridCtx.lineWidth = 1.6;
+      mnistGridCtx.strokeRect(px * cell, py * cell, pw * cell, ph * cell);
+
+      mnistGridCtx.strokeStyle = "#34d399";
+      mnistGridCtx.lineWidth = 1.6;
+      mnistGridCtx.strokeRect(inspectCell.x * cell, inspectCell.y * cell, cell, cell);
+    }
+  }
+
+  function updateConv1Selection() {
+    for (let f = 0; f < 8; f++) {
+      document.getElementById(`c1Tile_${f}`).classList.toggle("selected", f === selectedConv1);
+    }
+  }
+
+  function renderConv1Maps() {
+    const isPool = conv1ViewMode === "pool";
+    const buf = isPool ? cnn.pool1 : cnn.conv1;
+    const size = isPool ? 14 : 28;
+    const stride = size * size;
+
+    let globalMax = 0.05;
+    const peaks = new Float32Array(8);
+    for (let f = 0; f < 8; f++) {
+      let m = 0;
+      const off = f * stride;
+      for (let i = 0; i < stride; i++) if (buf[off + i] > m) m = buf[off + i];
+      peaks[f] = m;
+      if (m > globalMax) globalMax = m;
+    }
+
+    for (let f = 0; f < 8; f++) {
+      document.getElementById(`c1Peak_${f}`).textContent = peaks[f].toFixed(2);
+      document.getElementById(`c1Bar_${f}`).style.width = `${Math.min(100, Math.round((peaks[f] / globalMax) * 100))}%`;
+      renderMatrixToCanvas(document.getElementById(`c1Map_${f}`), buf, f * stride, size, Math.max(0.25, peaks[f]), "cyan");
+    }
+  }
+
+  function renderConv1Inspector() {
+    const f = selectedConv1;
+    const roleInfo = MODEL.conv1Roles[f] || { role: `Filter ${f}`, top_digits: [] };
+    document.getElementById("c1InspBadge").textContent = `CONV1 F${f}`;
+    document.getElementById("c1InspRole").textContent = roleInfo.role;
+    document.getElementById("c1InspDigits").textContent = `Top MNIST: ${roleInfo.top_digits.join(", ")}`;
+
+    // Draw enlarged 28x28 Conv1 map for selected filter
+    const off = f * 784;
+    let peak = 0.25;
+    for (let i = 0; i < 784; i++) if (cnn.conv1[off + i] > peak) peak = cnn.conv1[off + i];
+    renderMatrixToCanvas(selectedConv1Canvas, cnn.conv1, off, 28, peak, "cyan");
+
+    // Highlight inspected (x,y) pixel on enlarged Conv1 map
+    const cell = selectedConv1Canvas.width / 28;
+    selectedConv1Ctx.strokeStyle = "#f59e0b";
+    selectedConv1Ctx.lineWidth = 1.6;
+    selectedConv1Ctx.strokeRect(inspectCell.x * cell, inspectCell.y * cell, cell, cell);
+
+    document.getElementById("c1InspectorCaption").textContent = `Output cell (x:${inspectCell.x}, y:${inspectCell.y})`;
+
+    // Populate 3x3 input patch & 3x3 kernel weight matrices + live dot-product math
+    const patchEl = document.getElementById("matPatch");
+    const kernEl = document.getElementById("matKernel");
+    patchEl.innerHTML = "";
+    kernEl.innerHTML = "";
+
+    const wOff = f * 9;
+    let wMax = 0.05;
+    for (let i = 0; i < 9; i++) wMax = Math.max(wMax, Math.abs(cnn.W1[wOff + i]));
+
+    let dot = 0;
+    for (let ky = -1; ky <= 1; ky++) {
+      for (let kx = -1; kx <= 1; kx++) {
+        const ix = inspectCell.x + kx;
+        const iy = inspectCell.y + ky;
+        const xv = (ix >= 0 && ix < 28 && iy >= 0 && iy < 28) ? currentTensor[iy * 28 + ix] : 0;
+        const wv = cnn.W1[wOff + (ky + 1) * 3 + (kx + 1)];
+        dot += xv * wv;
+
+        const pSpan = document.createElement("span");
+        pSpan.textContent = xv.toFixed(2);
+        pSpan.style.background = `rgba(34, 211, 238, ${0.08 + xv * 0.52})`;
+        pSpan.style.color = xv > 0.55 ? "#020617" : "#cbd5e1";
+        patchEl.appendChild(pSpan);
+
+        const wSpan = document.createElement("span");
+        wSpan.textContent = (wv >= 0 ? "+" : "") + wv.toFixed(2);
+        const mag = Math.min(1, Math.abs(wv) / wMax);
+        wSpan.style.background = wv >= 0 ? `rgba(6, 182, 212, ${0.12 + 0.5 * mag})` : `rgba(139, 92, 246, ${0.12 + 0.5 * mag})`;
+        wSpan.style.color = "#f8fafc";
+        kernEl.appendChild(wSpan);
+      }
+    }
+
+    const bias = cnn.b1[f];
+    const preRelu = dot + bias;
+    const postRelu = Math.max(0, preRelu);
+    document.getElementById("c1MathEq").innerHTML =
+      `Σ(x·w) = <span style="color:#22d3ee">${dot >= 0 ? "+" : ""}${dot.toFixed(3)}</span> &nbsp;+&nbsp; b(<span style="color:#a78bfa">${bias >= 0 ? "+" : ""}${bias.toFixed(3)}</span>) = ${preRelu.toFixed(3)} &nbsp;→&nbsp; ReLU = <strong style="color:${postRelu > 0 ? "#34d399" : "#64748b"}">${postRelu.toFixed(3)}</strong>`;
+  }
+
+  function updateConv2Selection() {
+    for (let f = 0; f < 16; f++) {
+      document.getElementById(`c2Tile_${f}`).classList.toggle("selected", f === selectedConv2);
+    }
+  }
+
+  function renderConv2Maps() {
+    const isPool = conv2ViewMode === "pool";
+    const buf = isPool ? cnn.pool2 : cnn.conv2;
+    const size = isPool ? 7 : 14;
+    const stride = size * size;
+
+    const inspected = getInspectedClass();
+    document.getElementById("c2TargetLabel").textContent = lastResult.isEmpty ? "—" : inspected;
+
+    let maxAlpha = 0.001;
+    for (let f = 0; f < 16; f++) maxAlpha = Math.max(maxAlpha, Math.abs(cnn.conv2Alpha[f]));
+
+    for (let f = 0; f < 16; f++) {
+      const off = f * stride;
+      let peak = 0.25;
+      for (let i = 0; i < stride; i++) if (buf[off + i] > peak) peak = buf[off + i];
+      renderMatrixToCanvas(document.getElementById(`c2Map_${f}`), buf, off, size, peak, "violet");
+
+      const a = cnn.conv2Alpha[f];
+      const tag = document.getElementById(`c2Alpha_${f}`);
+      const tile = document.getElementById(`c2Tile_${f}`);
+      if (lastResult.isEmpty) {
+        tag.textContent = "α 0.00";
+        tag.className = "alpha-tag alpha-neu";
+        tile.classList.remove("pos-driver");
+      } else {
+        tag.textContent = `α ${a >= 0 ? "+" : ""}${(a * 100).toFixed(1)}`;
+        if (a > maxAlpha * 0.28) {
+          tag.className = "alpha-tag alpha-pos";
+          tile.classList.add("pos-driver");
+        } else if (a < -maxAlpha * 0.28) {
+          tag.className = "alpha-tag alpha-neg";
+          tile.classList.remove("pos-driver");
+        } else {
+          tag.className = "alpha-tag alpha-neu";
+          tile.classList.remove("pos-driver");
+        }
+      }
+    }
+  }
+
+  function renderConv2InspectorBar() {
+    const f = selectedConv2;
+    const info = MODEL.conv2Roles[f] || { zone: "Feature", top_digits: [] };
+    const off = f * 196;
+    let peak = 0, sum = 0;
+    for (let i = 0; i < 196; i++) {
+      const v = cnn.conv2[off + i];
+      if (v > peak) peak = v;
+      sum += v;
+    }
+    const mean = sum / 196;
+    const alpha = cnn.conv2Alpha[f];
+    const inspected = getInspectedClass();
+    document.getElementById("c2InspectorBar").innerHTML = `
+      <span><strong style="color:#a78bfa">Conv2 C${f}</strong> (${info.zone}) · Top MNIST: <strong style="color:#e2e8f0">${info.top_digits.join(", ")}</strong></span>
+      <span>Peak: <strong style="color:#22d3ee">${peak.toFixed(2)}</strong> · Mean: ${mean.toFixed(2)} · Grad-CAM α(${inspected}): <strong style="color:${alpha >= 0 ? "#34d399" : "#fda4af"}">${alpha >= 0 ? "+" : ""}${(alpha * 100).toFixed(2)}</strong></span>
+    `;
+  }
+
+  function updatePredictionUI() {
+    const autoBtn = document.getElementById("autoTargetBtn");
+    autoBtn.style.display = lockedClass !== null ? "inline-flex" : "none";
+
+    if (lastResult.isEmpty) {
+      document.getElementById("predictedDigitHero").textContent = "?";
+      document.getElementById("predictedProbHero").textContent = "0.0%";
+      document.getElementById("predictedProbBar").style.width = "0%";
+      document.getElementById("predictedLogitHero").textContent = "0.00";
+      document.getElementById("runnerUpHero").textContent = "None";
+      const chip = document.getElementById("confidenceStatusChip");
+      chip.textContent = "Awaiting Input";
+      chip.className = "badge badge-muted";
+
+      for (let d = 0; d < 10; d++) {
+        document.getElementById(`probFill_${d}`).style.width = "0%";
+        document.getElementById(`probText_${d}`).textContent = "0.0%";
+        document.getElementById(`probRow_${d}`).className = "prob-row";
+      }
+      return;
+    }
+
+    const ranked = [];
+    for (let d = 0; d < 10; d++) ranked.push({ digit: d, prob: cnn.probs[d], logit: cnn.logits[d] });
+    ranked.sort((a, b) => b.prob - a.prob);
+
+    const top = ranked[0], runner = ranked[1];
+    const topPct = (top.prob * 100).toFixed(1);
+    document.getElementById("predictedDigitHero").textContent = top.digit;
+    document.getElementById("predictedProbHero").textContent = `${topPct}%`;
+    document.getElementById("predictedProbBar").style.width = `${topPct}%`;
+    document.getElementById("predictedLogitHero").textContent = `${top.logit >= 0 ? "+" : ""}${top.logit.toFixed(2)}`;
+    document.getElementById("runnerUpHero").textContent = `#${runner.digit} (${(runner.prob * 100).toFixed(1)}%)`;
+
+    const chip = document.getElementById("confidenceStatusChip");
+    if (top.prob >= 0.80) {
+      chip.textContent = "High Confidence";
+      chip.className = "badge badge-cnn";
+    } else if (top.prob >= 0.50) {
+      chip.textContent = "Moderate";
+      chip.className = "badge badge-amber";
+    } else {
+      chip.textContent = "Ambiguous";
+      chip.className = "badge badge-rose";
+    }
+
+    const inspected = getInspectedClass();
+    for (let d = 0; d < 10; d++) {
+      const p = cnn.probs[d] * 100;
+      document.getElementById(`probFill_${d}`).style.width = `${Math.max(1, p).toFixed(1)}%`;
+      document.getElementById(`probText_${d}`).textContent = `${p.toFixed(1)}%`;
+      let cls = "prob-row";
+      if (d === top.digit) cls += " top";
+      if (lockedClass !== null && d === inspected) cls += " inspected";
+      document.getElementById(`probRow_${d}`).className = cls;
+    }
+  }
+
+  function renderExplainabilityPanel() {
+    const W = camCanvas.width, H = camCanvas.height;
+    const cell = W / 28;
+    camCtx.fillStyle = "#060a14";
+    camCtx.fillRect(0, 0, W, H);
+
+    const gradBar = document.getElementById("camGradBar");
+    const legend = document.getElementById("camLegend");
+    const headEl = document.getElementById("explainHeadline");
+    const bodyEl = document.getElementById("explainBodyText");
+    const pillsEl = document.getElementById("driverPills");
+    pillsEl.innerHTML = "";
+
+    if (lastResult.isEmpty) {
+      headEl.textContent = "Draw a digit to inspect CNN spatial evidence:";
+      bodyEl.textContent = "Grad-CAM pools exact Conv2 gradients across all 16 feature maps to show which regions of your stroke drove the prediction.";
+      return;
+    }
+
+    const cls = getInspectedClass();
+    const probPct = (cnn.probs[cls] * 100).toFixed(1);
+
+    if (camMode === "gradcam") {
+      gradBar.className = "grad-bar";
+      legend.innerHTML = "<span>Low</span><span>Conv2 Grad-CAM</span><span>Peak</span>";
+      for (let y = 0; y < 28; y++) {
+        for (let x = 0; x < 28; x++) {
+          const ink = currentTensor[y * 28 + x];
+          const cam = sampleBilinear14(cnn.gradCam14, x, y);
+          const [hr, hg, hb] = heatRGB(cam);
+          const base = Math.round(ink * 235);
+          const a = Math.min(0.82, cam * 0.92);
+          const r = Math.round(base * (1 - a) + hr * a);
+          const g = Math.round(base * (1 - a) + hg * a);
+          const b = Math.round(base * (1 - a) + hb * a);
+          camCtx.fillStyle = `rgb(${r},${g},${b})`;
+          camCtx.fillRect(x * cell, y * cell, Math.ceil(cell), Math.ceil(cell));
+        }
+      }
+      headEl.textContent = `Grad-CAM for Digit ${cls} (${probPct}%):`;
+    } else {
+      const src = camMode === "saliency" ? cnn.saliency28 : cnn.attrib28;
+      gradBar.className = "grad-bar grad-bar-div";
+      legend.innerHTML = "<span>− Hurts</span><span>0</span><span>+ Helps</span>";
+      let maxAbs = 1e-4;
+      for (let i = 0; i < 784; i++) maxAbs = Math.max(maxAbs, Math.abs(src[i]));
+
+      for (let y = 0; y < 28; y++) {
+        for (let x = 0; x < 28; x++) {
+          const ink = currentTensor[y * 28 + x];
+          const val = src[y * 28 + x] / maxAbs;
+          const mag = Math.min(1, Math.abs(val));
+          // Faint grayscale ink backdrop
+          let r = Math.round(12 + ink * 70);
+          let g = Math.round(16 + ink * 78);
+          let b = Math.round(28 + ink * 92);
+          if (val > 0.04) {
+            r = Math.round(r * (1 - mag) + 34 * mag);
+            g = Math.round(g * (1 - mag) + 215 * mag);
+            b = Math.round(b * (1 - mag) + 175 * mag);
+          } else if (val < -0.04) {
+            r = Math.round(r * (1 - mag) + 167 * mag);
+            g = Math.round(g * (1 - mag) + 90 * mag);
+            b = Math.round(b * (1 - mag) + 250 * mag);
+          }
+          camCtx.fillStyle = `rgb(${r},${g},${b})`;
+          camCtx.fillRect(x * cell, y * cell, Math.ceil(cell), Math.ceil(cell));
+        }
+      }
+      headEl.textContent = camMode === "saliency"
+        ? `Input Gradient ∂z(${cls})/∂x:`
+        : `Pixel Attribution x·∂z(${cls})/∂x:`;
+    }
+
+    // Rank Conv2 channels by their actual (alpha_k * mean_activation_k) contribution
+    const contrib = [];
+    for (let f = 0; f < 16; f++) {
+      let meanAct = 0;
+      const off = f * 196;
+      for (let i = 0; i < 196; i++) meanAct += cnn.conv2[off + i];
+      meanAct /= 196;
+      contrib.push({ f, score: cnn.conv2Alpha[f] * meanAct, alpha: cnn.conv2Alpha[f], zone: MODEL.conv2Roles[f]?.zone || "Region" });
+    }
+    contrib.sort((a, b) => b.score - a.score);
+    const topPos = contrib.filter((c) => c.score > 0).slice(0, 3);
+
+    if (camMode === "gradcam") {
+      const zones = [...new Set(topPos.map((c) => c.zone.toLowerCase()))].join(", ");
+      bodyEl.textContent = topPos.length
+        ? `Bright regions highlight where active Conv2 feature maps (${zones}) positively push logit z(${cls}) = ${cnn.logits[cls] >= 0 ? "+" : ""}${cnn.logits[cls].toFixed(2)}.`
+        : `No strongly positive Conv2 channels currently support Digit ${cls}.`;
+    } else if (camMode === "saliency") {
+      bodyEl.textContent = `Exact pixel gradient through all conv & pooling layers: cyan/emerald pixels would raise Digit ${cls}'s logit if darkened; violet pixels would lower it.`;
+    } else {
+      bodyEl.textContent = `Signed contribution of your actual inked pixels (x · ∂z/∂x) toward Digit ${cls}'s score.`;
+    }
+
+    for (const item of topPos) {
+      const pill = document.createElement("span");
+      pill.className = "driver-pill";
+      pill.textContent = `C${item.f} · ${item.zone}`;
+      pillsEl.appendChild(pill);
+    }
+  }
+
+  function triggerFineTune(targetDigit) {
+    if (!currentPreproc || currentPreproc.activeCount < 6) return;
+    let loss = 0;
+    for (let i = 0; i < 6; i++) {
+      loss = cnn.fineTuneHeadStep(currentTensor, targetDigit, 0.035);
+    }
+    document.getElementById("telemetrySteps").textContent = `+${cnn.fineTuneSteps} Head Steps`;
+    const fb = document.getElementById("backpropFeedback");
+    fb.classList.add("show");
+    document.getElementById("backpropMessage").textContent = `Fine-tuned head → Digit ${targetDigit}`;
+    document.getElementById("backpropLossDelta").textContent = `Loss: ${loss.toFixed(4)}`;
+    runInferencePipeline();
+  }
+
+  // Boot
+  window.addEventListener("DOMContentLoaded", () => {
+    initUI();
+    loadPresetDigit(8, false);
+  });
+})();
+</script>
+</body>
+</html>
